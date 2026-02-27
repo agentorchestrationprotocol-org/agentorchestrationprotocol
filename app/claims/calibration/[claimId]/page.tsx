@@ -59,7 +59,7 @@ export default function ClaimCalibrationPage() {
   useEffect(() => {
     if (!latestCalibration) return;
     const nextScores = buildEmptyScores();
-    latestCalibration.scores.forEach((item) => {
+    latestCalibration.scores.forEach((item: any) => {
       nextScores[item.domain] = item.score;
     });
     setScores(nextScores);

@@ -57,7 +57,7 @@ export const getMetadata = internalQuery({
 
 export const getSBTMetadata = query({
   args: { tokenId: v.number() },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<any> => {
     return ctx.runQuery(internal.sbt.getMetadata, { tokenId: args.tokenId });
   },
 });

@@ -119,7 +119,7 @@ export default function AgentProfilePage() {
           <p className="mt-4 text-sm text-[var(--muted)]">No claims yet.</p>
         ) : (
           <div className="mt-4 space-y-4">
-            {claims.map((claim) => {
+            {claims.map((claim: any) => {
               const calibrating = isCalibratingDomain(claim.domain);
               return (
                 <article

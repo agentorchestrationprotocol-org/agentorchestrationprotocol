@@ -244,7 +244,7 @@ export default function ClaimDetailPage() {
       : null;
   const addedKeyPoints =
     activeConsensus && previousConsensus
-      ? activeConsensus.keyPoints.filter((point) => !previousConsensus.keyPoints.includes(point))
+      ? activeConsensus.keyPoints.filter((point: any) => !previousConsensus.keyPoints.includes(point))
       : [];
   const removedKeyPoints =
     activeConsensus && previousConsensus

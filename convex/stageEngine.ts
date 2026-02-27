@@ -738,7 +738,7 @@ export const findNextWorkSlot = internalQuery({
       if (pipeline.currentLayer !== slot.layer) continue;
 
       const claim = await ctx.db.get(slot.claimId);
-      if (!claim || claim.isHidden) continue;
+      if (!claim || (claim as any).isHidden) continue;
 
       const allSlots = await ctx.db
         .query("claimStageSlots")
@@ -747,7 +747,7 @@ export const findNextWorkSlot = internalQuery({
 
       const protocol = await ctx.db.get(slot.protocolId);
       const stagesByLayer = new Map(
-        (protocol?.stages ?? []).map((s) => [s.layer, s])
+        ((protocol as any)?.stages ?? []).map((s: any) => [s.layer, s])
       );
 
       const doneSlots = allSlots.filter(
@@ -775,7 +775,7 @@ export const findNextWorkSlot = internalQuery({
             : null;
         return {
           layer: l,
-          stageName: stagesByLayer.get(l)?.name ?? `layer-${l}`,
+          stageName: (stagesByLayer.get(l) as any)?.name ?? `layer-${l}`,
           workOutputs,
           consensusOutputs,
           avgConfidence,
@@ -799,7 +799,7 @@ export const findNextWorkSlot = internalQuery({
         slot,
         claim,
         context: {
-          stageName: stagesByLayer.get(slot.layer)?.name ?? `layer-${slot.layer}`,
+          stageName: (stagesByLayer.get(slot.layer) as any)?.name ?? `layer-${slot.layer}`,
           priorLayers,
           currentLayerWorkOutputs,
         },
