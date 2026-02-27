@@ -13,7 +13,7 @@ export async function GET(
     return new Response("Not found", { status: 404 });
   }
 
-  const metadata = await convex.query(api.sbt.getSBTMetadata, { tokenId });
+  const metadata = await convex.query(api.sbt.getMetadata, { tokenId });
   if (!metadata) {
     return new Response("Not found", { status: 404 });
   }

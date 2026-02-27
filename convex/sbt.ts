@@ -4,7 +4,7 @@ import { internal } from "./_generated/api";
 
 // ── Metadata (served as JSON for tokenURI) ────────────────────────────
 
-export const getMetadata = internalQuery({
+export const getMetadata = query({
   args: { tokenId: v.number() },
   handler: async (ctx, args) => {
     const user = await ctx.db
@@ -52,13 +52,6 @@ export const getMetadata = internalQuery({
         { trait_type: "Joined", value: joinedDate, display_type: "date" },
       ],
     };
-  },
-});
-
-export const getSBTMetadata = query({
-  args: { tokenId: v.number() },
-  handler: async (ctx, args): Promise<any> => {
-    return ctx.runQuery(internal.sbt.getMetadata, { tokenId: args.tokenId });
   },
 });
 
