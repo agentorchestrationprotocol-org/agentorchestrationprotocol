@@ -513,183 +513,217 @@ function ProfilePageContent() {
 
         {/* Wallet tab */}
         {activeTab === "wallet" && (
-          <section className="rounded-2xl p-6">
-            <h2 className="text-lg font-semibold text-[var(--ink)]">Wallet & tokens</h2>
-            <p className="mt-1 text-sm text-[var(--muted)]">
-              Your on-chain identity. Wallet and SBT are account-level.
-            </p>
+          <section className="surface-card rounded-2xl border border-white/10 p-6">
+            <div>
+              <h2 className="text-lg font-semibold text-[var(--ink)]">Wallet & tokens</h2>
+              <p className="mt-1 text-sm text-[var(--muted)]">
+                Your on-chain identity. Wallet and SBT are account-level.
+              </p>
+            </div>
 
-            <div className="mt-6 grid gap-4 sm:grid-cols-3">
-              {/* Wallet */}
-              <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
-                  Wallet
-                </p>
-                {profile?.walletAddress ? (
-                  <div className="mt-3 flex items-center gap-1.5">
-                    <p className="min-w-0 flex-1 break-all font-mono text-xs text-[var(--ink)]">
-                      {profile.walletAddress}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void navigator.clipboard.writeText(profile.walletAddress ?? "")
-                      }
-                      className="shrink-0 rounded border border-[var(--border)] px-2 py-0.5 text-[10px] text-[var(--muted)] hover:border-[var(--border-hover)] hover:text-[var(--ink)]"
-                    >
-                      Copy
-                    </button>
-                  </div>
-                ) : (
-                  <div className="mt-3">
-                    <p className="text-xs text-[var(--muted)]">Not linked</p>
-                    <button
-                      type="button"
-                      onClick={() => void handleConnectAndLink()}
-                      disabled={walletBusy}
-                      className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-[#f6851b] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#e2761b] disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <MetaMaskIcon className="h-3.5 w-3.5 fill-white" />
-                      {walletBusy ? "Connecting..." : "Connect MetaMask"}
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* SBT */}
-              <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
-                  SBT
-                </p>
-                {profile?.sbtTokenId !== undefined ? (
-                  <a
-                    href={`https://basescan.org/token/0x2159931B9aD760e57cb6078EF7e9f44f72a95155?a=${profile.walletAddress}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-3 inline-block text-sm font-semibold text-[var(--accent)] hover:underline"
-                  >
-                    Token #{profile.sbtTokenId}
-                  </a>
-                ) : profile?.walletAddress ? (
-                  <div className="mt-3">
-                    <p className="text-xs text-[var(--muted)]">Not minted</p>
-                    <button
-                      type="button"
-                      disabled={walletBusy}
-                      onClick={() => void handleRetryMint()}
-                      className="mt-2 rounded-full border border-[var(--border)] px-2.5 py-1 text-xs font-medium hover:border-[var(--border-hover)] hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {walletBusy ? "..." : "Mint SBT"}
-                    </button>
-                  </div>
-                ) : (
-                  <p className="mt-3 text-xs text-[var(--muted)]">Link wallet first</p>
-                )}
-              </div>
-
-              {/* AOP balance */}
-              <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
-                  AOP balance
-                </p>
-                <p className="mt-3 text-sm font-semibold text-[var(--ink)]">
-                  {profile?.tokenBalance ?? 0} AOP claimable
-                </p>
+            <div className="mt-8 flex flex-col gap-8">
+              {/* 1. Balance and Claim Action */}
+              <div className="flex flex-col items-center pt-4 pb-2">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--muted)]">Available to claim</p>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <span className="text-5xl font-bold tracking-tight text-[var(--ink)]">{profile?.tokenBalance ?? 0}</span>
+                  <span className="text-lg font-medium text-[var(--muted)]">AOP</span>
+                </div>
                 {(profile?.tokenClaimed ?? 0) > 0 && (
-                  <p className="mt-0.5 text-xs text-[var(--muted)]">
-                    {profile?.tokenClaimed} AOP claimed on-chain
-                  </p>
+                  <div className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--bg-card)] px-3 py-1 shadow-sm">
+                    <span className="text-sm">🏆</span>
+                    <span className="text-xs font-semibold text-[var(--ink)]">{profile?.tokenClaimed} AOP</span>
+                    <span className="text-xs text-[var(--muted)]">claimed on-chain</span>
+                  </div>
                 )}
                 {profile?.walletAddress && (profile?.tokenBalance ?? 0) > 0 && !["pending","confirming"].includes(profile?.tokenClaimStatus ?? "") && (
                   <button
                     type="button"
                     onClick={() => void handleClaim()}
                     disabled={walletBusy}
-                    className="mt-3 rounded-full bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[var(--accent-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+                    className="mt-6 rounded-full bg-[var(--accent)] px-8 py-3 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-hover)] disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {walletBusy ? "Claiming..." : `Claim ${profile.tokenBalance} AOP`}
                   </button>
                 )}
-                {aopTokenAddress && (
-                  <button
-                    type="button"
-                    onClick={() => void handleAddAopToMetaMask()}
-                    className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] px-2.5 py-1 text-[10px] font-medium text-[var(--muted)] hover:border-[var(--border-hover)] hover:text-[var(--ink)]"
-                  >
-                    <MetaMaskIcon className="h-3 w-3" />
-                    Add AOP to MetaMask
-                  </button>
-                )}
               </div>
-            </div>
 
-            {/* Claim progress */}
-            {profile?.tokenClaimStatus && (
-              <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
-                  Claim progress
-                </p>
-                <div className="mt-3 flex items-center gap-0">
-                  {[
-                    { key: "pending", label: "Queued" },
-                    { key: "confirming", label: "Confirming" },
-                    { key: "confirmed", label: "Confirmed" },
-                  ].map((step, i) => {
-                    const statusOrder = ["pending", "confirming", "confirmed", "failed"];
-                    const currentIdx = statusOrder.indexOf(profile.tokenClaimStatus ?? "");
-                    const stepIdx = statusOrder.indexOf(step.key);
-                    const done = currentIdx > stepIdx;
-                    const active = currentIdx === stepIdx && profile.tokenClaimStatus !== "failed";
-                    return (
-                      <div key={step.key} className="flex items-center">
-                        <div className="flex flex-col items-center">
+              {/* 2. Progress Stepper */}
+              {profile?.tokenClaimStatus && (
+                <div className="mx-auto mt-2 w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-6">
+                  <div className="relative flex justify-between">
+                    <div className="absolute left-0 top-3 h-[2px] w-full bg-[var(--border)]" />
+                    {[
+                      { key: "pending", label: "Queued" },
+                      { key: "confirming", label: "Confirming" },
+                      { key: "confirmed", label: "Confirmed" },
+                    ].map((step, i) => {
+                      const statusOrder = ["pending", "confirming", "confirmed", "failed"];
+                      const currentIdx = statusOrder.indexOf(profile.tokenClaimStatus ?? "");
+                      const stepIdx = statusOrder.indexOf(step.key);
+                      const done = currentIdx > stepIdx;
+                      const active = currentIdx === stepIdx && profile.tokenClaimStatus !== "failed";
+                      const isFailed = profile.tokenClaimStatus === "failed";
+                      return (
+                        <div key={step.key} className="relative z-10 flex flex-col items-center bg-[var(--bg-card)] px-2">
                           <div className={[
-                            "flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold",
+                            "flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ring-4 ring-[var(--bg-card)]",
                             done ? "bg-[var(--accent)] text-white"
-                              : active ? "border-2 border-[var(--accent)] text-[var(--accent)]"
-                              : "border border-[var(--border)] text-[var(--muted)]",
+                              : active ? "border-2 border-[var(--accent)] bg-[var(--bg-card)] text-[var(--accent)]"
+                              : "border-2 border-[var(--border)] bg-[var(--bg-card)] text-[var(--muted)]",
+                            (active && isFailed) ? "border-red-500 text-red-500" : ""
                           ].join(" ")}>
                             {done ? "✓" : i + 1}
                           </div>
                           <p className={[
-                            "mt-1 text-[10px]",
+                            "mt-2 text-[11px] font-semibold uppercase tracking-wide",
                             done || active ? "text-[var(--ink)]" : "text-[var(--muted)]",
+                            (active && isFailed) ? "text-red-500" : ""
                           ].join(" ")}>
                             {step.label}
                           </p>
                         </div>
-                        {i < 2 && (
-                          <div className={[
-                            "mb-3 h-px w-8",
-                            done ? "bg-[var(--accent)]" : "bg-[var(--border)]",
-                          ].join(" ")} />
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-                {profile.tokenClaimStatus === "failed" && (
-                  <p className="mt-2 text-xs text-red-500">Transaction failed — tokens restored to your balance.</p>
-                )}
-                {profile.tokenClaimStatus === "confirming" && (
-                  <p className="mt-2 text-xs text-[var(--muted)]">Waiting for Base network confirmation...</p>
-                )}
-                {profile.tokenTxHash && (
-                  <a
-                    href={`https://basescan.org/tx/${profile.tokenTxHash}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-2 block font-mono text-[10px] text-[var(--accent)] hover:underline"
-                  >
-                    {profile.tokenTxHash.slice(0, 12)}...{profile.tokenTxHash.slice(-8)} →
-                  </a>
-                )}
-              </div>
-            )}
+                      );
+                    })}
+                  </div>
 
-            {walletStatus && (
-              <p className="mt-4 text-xs text-[var(--muted)]">{walletStatus}</p>
-            )}
+                  <div className="mt-6 flex flex-col items-center text-center">
+                    {profile.tokenClaimStatus === "failed" && (
+                      <p className="text-xs text-red-500">Transaction failed — tokens restored to your balance.</p>
+                    )}
+                    {profile.tokenClaimStatus === "confirming" && (
+                      <p className="text-xs text-[var(--muted)]">Waiting for Base network confirmation...</p>
+                    )}
+                    
+                    {/* Tx Hash */}
+                    {profile.tokenTxHash && (
+                      <div className="mt-2 flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">TX</span>
+                        <a
+                          href={`https://basescan.org/tx/${profile.tokenTxHash}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-mono text-xs text-[var(--accent)] hover:underline"
+                          title="View on Basescan"
+                        >
+                          {profile.tokenTxHash.slice(0, 6)}...{profile.tokenTxHash.slice(-4)}
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => void navigator.clipboard.writeText(profile.tokenTxHash ?? "")}
+                          className="text-[var(--muted)] hover:text-[var(--ink)]"
+                          title="Copy Transaction Hash"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                        </button>
+                        <a
+                          href={`https://basescan.org/tx/${profile.tokenTxHash}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[var(--muted)] hover:text-[var(--ink)]"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                          </svg>
+                        </a>
+                      </div>
+                    )}
+
+                    {/* Add to MetaMask */}
+                    {aopTokenAddress && (
+                      <button
+                        type="button"
+                        onClick={() => void handleAddAopToMetaMask()}
+                        className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-4 py-2 text-sm font-medium text-[var(--ink)] transition-colors hover:border-[var(--border-hover)] hover:bg-[var(--bg-elevated)]"
+                      >
+                        <MetaMaskIcon className="h-4 w-4" />
+                        Add AOP to MetaMask
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <hr className="border-[var(--border)]" />
+
+              {/* 3. Wallet Tools & SBT */}
+              <div className="grid gap-6 sm:grid-cols-2">
+                {/* Wallet */}
+                <div className="flex flex-col items-start rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Wallet Address</p>
+                  {profile?.walletAddress ? (
+                    <div className="mt-3 flex w-full items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2">
+                      <p className="min-w-0 flex-1 truncate font-mono text-xs text-[var(--ink)]">
+                        {profile.walletAddress}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => void navigator.clipboard.writeText(profile.walletAddress ?? "")}
+                        className="shrink-0 text-[var(--muted)] hover:text-[var(--ink)]"
+                        title="Copy Wallet Address"
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mt-3 w-full">
+                      <p className="mb-2 text-xs text-[var(--muted)]">No wallet connected</p>
+                      <button
+                        type="button"
+                        onClick={() => void handleConnectAndLink()}
+                        disabled={walletBusy}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-[#f6851b] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#e2761b] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <MetaMaskIcon className="h-3.5 w-3.5 fill-white" />
+                        {walletBusy ? "Connecting..." : "Connect MetaMask"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* SBT */}
+                <div className="flex flex-col items-start rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Soulbound Token</p>
+                  {profile?.sbtTokenId !== undefined ? (
+                    <div className="mt-3">
+                      <a
+                        href={`https://basescan.org/token/0x2159931B9aD760e57cb6078EF7e9f44f72a95155?a=${profile.walletAddress}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--accent)] bg-[var(--accent)]/10 px-3 py-1.5 text-sm font-semibold text-[var(--accent)] transition-colors hover:bg-[var(--accent)]/20"
+                      >
+                        Token #{profile.sbtTokenId}
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                      </a>
+                    </div>
+                  ) : profile?.walletAddress ? (
+                    <div className="mt-3 w-full">
+                      <p className="mb-2 text-xs text-[var(--muted)]">Verify your on-chain identity</p>
+                      <button
+                        type="button"
+                        disabled={walletBusy}
+                        onClick={() => void handleRetryMint()}
+                        className="rounded-full border border-[var(--border)] px-4 py-1.5 text-xs font-medium text-[var(--ink)] hover:border-[var(--border-hover)] hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {walletBusy ? "..." : "Mint SBT"}
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-xs text-[var(--muted)]">Link wallet to mint your agent SBT</p>
+                  )}
+                </div>
+              </div>
+
+              {walletStatus && (
+                <p className="text-center text-xs text-[var(--muted)]">{walletStatus}</p>
+              )}
+            </div>
           </section>
         )}
 
