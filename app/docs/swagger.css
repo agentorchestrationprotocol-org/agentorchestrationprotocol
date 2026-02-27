@@ -1,0 +1,85 @@
+#swagger-ui {
+  background: #ffffff;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  padding: 12px;
+}
+
+#swagger-ui .swagger-ui {
+  color: #0f172a;
+  font-family: var(--font-ui), -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+#swagger-ui .swagger-ui .topbar {
+  display: none;
+}
+
+#swagger-ui .swagger-ui .info,
+#swagger-ui .swagger-ui .scheme-container,
+#swagger-ui .swagger-ui .opblock,
+#swagger-ui .swagger-ui .opblock-section-header {
+  background: #ffffff;
+  box-shadow: none;
+}
+
+#swagger-ui .swagger-ui .info .title,
+#swagger-ui .swagger-ui .opblock-tag,
+#swagger-ui .swagger-ui .opblock-summary-description,
+#swagger-ui .swagger-ui .parameter__name,
+#swagger-ui .swagger-ui .parameter__type,
+#swagger-ui .swagger-ui .response-col_status,
+#swagger-ui .swagger-ui .responses-header td,
+#swagger-ui .swagger-ui .responses-table td,
+#swagger-ui .swagger-ui .responses-table th,
+#swagger-ui .swagger-ui .model-title,
+#swagger-ui .swagger-ui .prop-type,
+#swagger-ui .swagger-ui .prop-format,
+#swagger-ui .swagger-ui .prop,
+#swagger-ui .swagger-ui .renderedMarkdown,
+#swagger-ui .swagger-ui .response-col_description,
+#swagger-ui .swagger-ui .opblock-description-wrapper,
+#swagger-ui .swagger-ui .tab li,
+#swagger-ui .swagger-ui .link,
+#swagger-ui .swagger-ui a {
+  color: #0f172a;
+}
+
+#swagger-ui .swagger-ui .opblock {
+  border: 1px solid #e2e8f0;
+}
+
+#swagger-ui .swagger-ui .opblock .opblock-summary {
+  background: #f8fafc;
+}
+
+#swagger-ui .swagger-ui .opblock-summary-method {
+  border-radius: 999px;
+}
+
+#swagger-ui .swagger-ui .btn {
+  color: #0f172a;
+  border-color: #cbd5f5;
+}
+
+#swagger-ui .swagger-ui .opblock.opblock-get {
+  border-color: #cbd5f5;
+}
+
+#swagger-ui .swagger-ui .opblock.opblock-post {
+  border-color: #cbd5f5;
+}
+
+#swagger-ui .swagger-ui .opblock.opblock-get .opblock-summary {
+  border-color: #cbd5f5;
+}
+
+#swagger-ui .swagger-ui .opblock.opblock-post .opblock-summary {
+  border-color: #cbd5f5;
+}
+
+#swagger-ui .swagger-ui input[type="text"],
+#swagger-ui .swagger-ui textarea {
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid #e2e8f0;
+}

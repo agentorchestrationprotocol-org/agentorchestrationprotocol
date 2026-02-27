@@ -1,0 +1,211 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+:root {
+  --bg: #070b12;
+  --bg-soft: #0b111a;
+  --bg-elevated: #111925;
+  --bg-card: #151f2d;
+  --bg-card-hover: #182334;
+  --border: transparent;
+  --border-soft: transparent;
+  --border-hover: transparent;
+  --ink: #e9f1ff;
+  --ink-soft: #c4d2e4;
+  --muted: #90a3ba;
+  --accent: #4f9dff;
+  --accent-hover: #63abff;
+  --accent-strong: #2f86f8;
+  --upvote: #59afff;
+  --downvote: #ff7b7b;
+  --radius-1: 12px;
+  --radius-2: 16px;
+  --radius-3: 26px;
+  --shadow-card: none;
+  --shadow-soft: none;
+}
+
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--ink);
+  --font-sans: var(--font-ui);
+  --font-mono: var(--font-ui);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: linear-gradient(180deg, #080d15 0%, var(--bg) 40%, #060a10 100%);
+  color: var(--ink);
+  font-family: var(--font-ui), -apple-system, BlinkMacSystemFont, sans-serif;
+  text-rendering: optimizeLegibility;
+  line-height: 1.55;
+  letter-spacing: -0.01em;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display), var(--font-ui), sans-serif;
+  letter-spacing: -0.02em;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@layer components {
+  .surface-card {
+    border: 0 !important;
+    outline: none;
+    border-radius: var(--radius-2);
+    background: transparent;
+    box-shadow: var(--shadow-card);
+  }
+
+  .surface-panel {
+    border: 0 !important;
+    outline: none;
+    border-radius: var(--radius-1);
+    background: transparent;
+    box-shadow: var(--shadow-soft);
+  }
+
+  .surface-inset {
+    border: 0 !important;
+    outline: none;
+    border-radius: 10px;
+    background: transparent;
+  }
+
+  .chip {
+    border: 0 !important;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    padding: 4px 10px;
+    transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+  }
+
+  .chip:hover {
+    color: var(--ink);
+    background: transparent;
+  }
+
+  .btn-primary {
+    border-radius: 999px;
+    background: linear-gradient(180deg, var(--accent-hover) 0%, var(--accent-strong) 100%);
+    color: #f6fbff;
+    font-weight: 700;
+    font-size: 14px;
+    border: 0;
+    box-shadow: 0 2px 8px rgba(36, 119, 224, 0.26);
+    transition: filter 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .btn-primary:hover {
+    filter: brightness(1.03);
+    box-shadow: 0 4px 10px rgba(36, 119, 224, 0.28);
+  }
+
+  .btn-secondary {
+    border-radius: 999px;
+    border: 0;
+    background: transparent;
+    color: var(--ink-soft);
+    font-weight: 600;
+    transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+  }
+
+  .btn-secondary:hover {
+    background: transparent;
+    color: var(--ink);
+  }
+
+  .btn-ghost {
+    color: var(--muted);
+    transition: color 0.15s ease, background-color 0.15s ease;
+    border-radius: 999px;
+  }
+
+  .btn-ghost:hover {
+    color: var(--ink);
+    background: transparent;
+  }
+
+  .field {
+    width: 100%;
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    color: var(--ink);
+    padding: 10px 12px;
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  }
+
+  .field:focus {
+    border-color: transparent;
+    box-shadow: none;
+    background: transparent;
+  }
+}
+
+@layer utilities {
+  .animate-fade-up {
+    animation: fade-up 0.5s ease both;
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.4s ease both;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+}

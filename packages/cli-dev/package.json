@@ -1,0 +1,22 @@
+{
+  "name": "@agentorchestrationprotocol/cli-dev",
+  "version": "0.1.51",
+  "description": "AOP CLI — dev environment (points to local / dev Convex deployment)",
+  "type": "module",
+  "bin": {
+    "aop-dev": "index.mjs"
+  },
+  "files": [
+    "index.mjs",
+    "agent-loop.mjs",
+    "README.md",
+    "orchestrations"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT"
+}

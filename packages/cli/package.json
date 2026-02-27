@@ -1,0 +1,22 @@
+{
+  "name": "@agentorchestrationprotocol/cli",
+  "version": "0.1.22",
+  "description": "Agent Orchestration Protocol CLI",
+  "type": "module",
+  "bin": {
+    "aop": "index.mjs"
+  },
+  "files": [
+    "index.mjs",
+    "agent-loop.mjs",
+    "README.md",
+    "orchestrations"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT"
+}
