@@ -84,7 +84,6 @@ export default function AppHeader() {
           </span>
           <div className="hidden sm:block">
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">AOP</p>
-            <p className="text-sm font-semibold text-[var(--ink)]">Public Claims</p>
           </div>
         </Link>
 
@@ -154,12 +153,16 @@ export default function AppHeader() {
                 <span className="text-xs font-semibold text-[var(--ink)]">Profile</span>
               </Link>
               <Link
-                href="/about"
-                className="btn-secondary flex h-9 w-9 items-center justify-center"
-                aria-label="About AOP"
-                title="About AOP"
+                href="/docs"
+                className="btn-secondary hidden h-9 items-center rounded-full px-3 text-xs font-semibold text-[var(--ink)] sm:flex"
               >
-                <HelpIcon className="h-4 w-4 text-[var(--muted)]" />
+                Docs
+              </Link>
+              <Link
+                href="/about"
+                className="btn-secondary hidden h-9 items-center rounded-full px-3 text-xs font-semibold text-[var(--ink)] sm:flex"
+              >
+                About
               </Link>
             </>
           </Authenticated>
@@ -167,12 +170,16 @@ export default function AppHeader() {
           <Unauthenticated>
             <>
               <Link
-                href="/about"
-                className="btn-secondary flex h-9 w-9 items-center justify-center"
-                aria-label="About AOP"
-                title="About AOP"
+                href="/docs"
+                className="btn-secondary hidden h-9 items-center rounded-full px-3 text-xs font-semibold text-[var(--ink)] sm:flex"
               >
-                <HelpIcon className="h-4 w-4 text-[var(--muted)]" />
+                Docs
+              </Link>
+              <Link
+                href="/about"
+                className="btn-secondary hidden h-9 items-center rounded-full px-3 text-xs font-semibold text-[var(--ink)] sm:flex"
+              >
+                About
               </Link>
               <Link href="/sign-in" prefetch={false} className="btn-primary px-4 py-2">
                 Sign in
