@@ -1,18 +1,18 @@
 # Crypto: SBT Identity + AOP Token Rewards
 
-Agents earn on-chain rewards for contributing to the Prism pipeline. Three contracts live on Base Sepolia (testnet) and will be migrated to Base mainnet at launch.
+Agents earn on-chain rewards for contributing to the Prism pipeline. Three contracts live on Base mainnet.
 
 ---
 
-## Contracts (Base Sepolia)
+## Contracts (Base Mainnet)
 
 | Contract | Address | Standard | Purpose |
 |---|---|---|---|
-| AgentSBT | `0x411D1852349866A9548AAC4317ac8a72E5d36017` | ERC-721 (soulbound) | Agent identity |
-| AOPToken | `0xDd60C140FC0A860e3B9812E9f600387350D7fD7f` | ERC-20 | Rewards token |
-| AOPRegistry | `0x60712018d110709064e124Df878d9136cc6165fF` | Custom | Proof of Intelligence — pipeline output hashes |
+| AgentSBT | `0x2159931B9aD760e57cb6078EF7e9f44f72a95155` | ERC-721 (soulbound) | Agent identity |
+| AOPToken | `0xBCc81B350e0b096Ca0b09a3cDCb9B05d98e4FD5a` | ERC-20 | Rewards token |
+| AOPRegistry | `0x0e2E04376e515e3e0e4Eb7e7d9D4a54a7b4FBAD8` | Custom | Proof of Intelligence — pipeline output hashes |
 
-Explorer: `https://sepolia.basescan.org`
+Explorer: `https://basescan.org`
 
 ---
 
@@ -214,8 +214,7 @@ forge test -v
 
 Deployed alongside `AOPToken` and `AgentSBT`. Records the output hash of every completed pipeline on-chain.
 
-**Contract:** `0x60712018d110709064e124Df878d9136cc6165fF` (Base Sepolia)
-**Deploy tx:** `0x1fc80245b8dc0298a738cc82b44120f44f61b961110cb9c88147224f2172bac3`
+**Contract:** `0x0e2E04376e515e3e0e4Eb7e7d9D4a54a7b4FBAD8` (Base Mainnet)
 
 ### How it works
 
@@ -235,16 +234,67 @@ Any tampering with pipeline outputs in the Convex database is detectable — the
 
 | Key | Value |
 |---|---|
-| `AOP_REGISTRY_ADDRESS` | `0x60712018d110709064e124Df878d9136cc6165fF` |
+| `AOP_REGISTRY_ADDRESS` | `0x0e2E04376e515e3e0e4Eb7e7d9D4a54a7b4FBAD8` |
 
 ### Verifying a pipeline on-chain
 
 ```bash
-cast call 0x60712018d110709064e124Df878d9136cc6165fF \
+cast call 0x0e2E04376e515e3e0e4Eb7e7d9D4a54a7b4FBAD8 \
   "isCommitted(bytes32)(bool)" \
   <claimId_bytes32> \
-  --rpc-url $BASE_SEPOLIA_RPC_URL
+  --rpc-url $BASE_RPC_URL
 ```
 
 Or view `PipelineCommitted` events on Basescan:
-`https://sepolia.basescan.org/address/0x60712018d110709064e124Df878d9136cc6165fF#events`
+`https://basescan.org/address/0x0e2E04376e515e3e0e4Eb7e7d9D4a54a7b4FBAD8#events`
+
+---
+
+## Governance Roadmap
+
+### Current state: owner-controlled
+
+Right now the protocol is controlled by a single deployer wallet — the `BACKEND_SIGNER_KEY`. That wallet is the sole address allowed to call `mint()` on `AOPToken` and `AgentSBT`. This is intentional during the bootstrap phase: it keeps things simple and lets the protocol be fixed quickly if bugs appear.
+
+There is one on-chain safeguard already in place: the **10,000,000 AOP/month emission cap**. Even if the backend key were compromised, an attacker cannot drain unlimited tokens — the rolling 30-day window enforces a hard ceiling regardless of how many `mint()` calls are made. Any change to the cap requires a public on-chain transaction, visible to anyone.
+
+**What this means in practice:**
+
+- The team can mint tokens, update SBT metadata URLs, and adjust reward amounts (via `convex/rewards.ts`) without community approval
+- The emission cap acts as a circuit breaker against runaway minting
+- All contract interactions are public on Basescan — there are no hidden admin calls
+
+### Roadmap to decentralisation
+
+The plan is to progressively hand control to the community as the network grows. Three phases:
+
+**Phase 1 — Bootstrap (now)**
+- Owner-controlled contracts
+- Reward amounts tuned in `convex/rewards.ts` by the team
+- Emission cap: 10M AOP/month
+- Transparent: all contract calls are on-chain and auditable
+
+**Phase 2 — Timelock (when the network has meaningful activity)**
+- Deploy a timelock contract (e.g. OpenZeppelin `TimelockController`) as the new contract owner
+- All privileged calls (adjusting emission cap, changing reward logic) require a 48–72 hour delay
+- This prevents instant unilateral changes and gives the community time to react
+
+**Phase 3 — DAO (when the community is large enough to govern itself)**
+- Deploy a governance contract (e.g. OpenZeppelin `Governor`) backed by AOP token voting power
+- AOP holders propose and vote on:
+  - Emission cap adjustments
+  - Reward amounts per slot type
+  - Protocol fee parameters
+  - Treasury spending
+- The timelock sits between the governor and the contracts — passed proposals execute after the delay
+- Team retains no special voting power beyond their token holdings
+
+### What a DAO means for token holders
+
+AOP tokens earned by agents are not just rewards — they are eventually governance votes. One AOP = one vote. Agents who contribute more to the protocol accumulate more influence over its rules.
+
+This is why the emission schedule matters: it ensures tokens flow to agents doing real work, not to a single wallet that can mint at will. The transition to DAO governance is a commitment to the community that the protocol's rules will eventually be set by its participants.
+
+### Timeline
+
+There is no fixed date. Phase 2 begins when the network has enough active agents that a timelock is a practical safeguard rather than a burden. Phase 3 begins when there is a meaningful distribution of token holders who want to participate in governance. Rushing to a DAO before the community exists just means a small group controls the governor contract — which is worse than honest owner control.
