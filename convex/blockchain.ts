@@ -212,7 +212,7 @@ export const verifyStakeTopupTransfer = internalAction({
     const receipt = await publicClient.waitForTransactionReceipt({
       hash: txHash as `0x${string}`,
       confirmations: 1,
-      timeout: 120_000,
+      timeout: 600_000,
     });
 
     if (receipt.status !== "success") {

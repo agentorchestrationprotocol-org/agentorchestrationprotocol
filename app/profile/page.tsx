@@ -372,6 +372,7 @@ function ProfilePageContent() {
 
     setWalletBusy(true);
     setTopupTxHash(null);
+    let submittedTxHash: string | null = null;
     try {
       await ethereum.request({
         method: "wallet_requestPermissions",
@@ -425,12 +426,10 @@ function ProfilePageContent() {
         ],
       })) as string;
 
+      submittedTxHash = txHash;
       setTopupTxHash(txHash);
       setWalletStatus("Transfer submitted. Waiting for on-chain confirmation...");
-
-      const result = (await topUpStakeFromWalletTransfer({
-        txHash,
-      })) as {
+      const result = (await topUpStakeFromWalletTransfer({ txHash })) as {
         applied: boolean;
         amount: number;
         tokenBalance: number;
@@ -457,8 +456,46 @@ function ProfilePageContent() {
         setWalletStatus("Transaction cancelled.");
       } else {
         const msg = (err as { message?: string })?.message ?? "Stake top-up failed.";
-        setWalletStatus(msg);
+        if (submittedTxHash) {
+          setWalletStatus(
+            `${msg} You can retry verification without sending again using "Verify top-up tx".`
+          );
+        } else {
+          setWalletStatus(msg);
+        }
       }
+    } finally {
+      setWalletBusy(false);
+    }
+  };
+
+  const handleVerifyTopupTx = async () => {
+    if (walletBusy || !topupTxHash) return;
+    setWalletBusy(true);
+    setWalletStatus("Verifying top-up transaction...");
+    try {
+      const result = (await topUpStakeFromWalletTransfer({
+        txHash: topupTxHash,
+      })) as {
+        applied: boolean;
+        amount: number;
+      };
+      setWalletStatus(
+        result.applied
+          ? `Top-up confirmed: ${result.amount} AOP added to protocol stake balance.`
+          : `Top-up already processed for ${result.amount} AOP.`
+      );
+      try {
+        const snapshot = await getMyWalletAopBalance({});
+        setWalletOnChainBalance(
+          snapshot && typeof snapshot.balance === "number" ? snapshot.balance : null
+        );
+      } catch {
+        // no-op
+      }
+    } catch (err: unknown) {
+      const msg = (err as { message?: string })?.message ?? "Top-up verification failed.";
+      setWalletStatus(msg);
     } finally {
       setWalletBusy(false);
     }
@@ -810,14 +847,27 @@ function ProfilePageContent() {
                     </p>
                   )}
                   {topupTxHash && (
-                    <a
-                      href={`https://basescan.org/tx/${topupTxHash}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-2 inline-flex text-[11px] font-medium text-[var(--accent)] hover:underline"
-                    >
-                      View top-up tx
-                    </a>
+                    <div className="mt-2 flex flex-wrap items-center gap-3">
+                      <a
+                        href={`https://basescan.org/tx/${topupTxHash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex text-[11px] font-medium text-[var(--accent)] hover:underline"
+                      >
+                        View top-up tx
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => void handleVerifyTopupTx()}
+                        disabled={walletBusy}
+                        className="rounded-full border border-[var(--border)] px-3 py-1 text-[11px] font-semibold text-[var(--ink)] hover:border-[var(--border-hover)] hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {walletBusy ? "Verifying..." : "Verify top-up tx"}
+                      </button>
+                    </div>
+                  )}
+                  {walletStatus && (
+                    <p className="mt-2 text-xs text-[var(--muted)]">{walletStatus}</p>
                   )}
                 </div>
               </div>
@@ -994,9 +1044,6 @@ function ProfilePageContent() {
                 </div>
               </div>
 
-              {walletStatus && (
-                <p className="text-center text-xs text-[var(--muted)]">{walletStatus}</p>
-              )}
             </div>
           </section>
         )}
