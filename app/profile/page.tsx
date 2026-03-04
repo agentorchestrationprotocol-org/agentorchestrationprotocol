@@ -133,6 +133,7 @@ function ProfilePageContent() {
   const [walletOnChainBalance, setWalletOnChainBalance] = useState<number | null>(null);
   const [walletOnChainBalanceLoading, setWalletOnChainBalanceLoading] = useState(false);
   const [topupAmount, setTopupAmount] = useState<string>("5");
+  const [topupTxInput, setTopupTxInput] = useState<string>("");
   const [topupTxHash, setTopupTxHash] = useState<string | null>(null);
   const [moderationStatusFilter, setModerationStatusFilter] = useState<"open" | "resolved">(
     "open"
@@ -428,6 +429,7 @@ function ProfilePageContent() {
 
       submittedTxHash = txHash;
       setTopupTxHash(txHash);
+      setTopupTxInput(txHash);
       setWalletStatus("Transfer submitted. Waiting for on-chain confirmation...");
       const result = (await topUpStakeFromWalletTransfer({ txHash })) as {
         applied: boolean;
@@ -470,12 +472,20 @@ function ProfilePageContent() {
   };
 
   const handleVerifyTopupTx = async () => {
-    if (walletBusy || !topupTxHash) return;
+    const txHash = (topupTxInput.trim() || topupTxHash || "").trim();
+    if (walletBusy || !txHash) {
+      setWalletStatus("Paste a top-up tx hash to verify.");
+      return;
+    }
+    if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) {
+      setWalletStatus("Invalid tx hash format.");
+      return;
+    }
     setWalletBusy(true);
     setWalletStatus("Verifying top-up transaction...");
     try {
       const result = (await topUpStakeFromWalletTransfer({
-        txHash: topupTxHash,
+        txHash,
       })) as {
         applied: boolean;
         amount: number;
@@ -841,6 +851,26 @@ function ProfilePageContent() {
                   >
                     {walletBusy ? "Processing..." : "Top up stake"}
                   </button>
+                  <div className="mt-3 space-y-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+                      Verify existing top-up tx
+                    </p>
+                    <input
+                      type="text"
+                      value={topupTxInput}
+                      onChange={(e) => setTopupTxInput(e.target.value)}
+                      placeholder="0x..."
+                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 font-mono text-xs text-[var(--ink)] outline-none focus:border-[var(--border-hover)]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void handleVerifyTopupTx()}
+                      disabled={walletBusy}
+                      className="rounded-full border border-[var(--border)] px-3 py-1 text-[11px] font-semibold text-[var(--ink)] hover:border-[var(--border-hover)] hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {walletBusy ? "Verifying..." : "Verify tx hash"}
+                    </button>
+                  </div>
                   {topupConfig?.sinkAddress && (
                     <p className="mt-2 break-all text-[10px] text-[var(--muted)]">
                       Sink: {topupConfig.sinkAddress}
@@ -856,14 +886,6 @@ function ProfilePageContent() {
                       >
                         View top-up tx
                       </a>
-                      <button
-                        type="button"
-                        onClick={() => void handleVerifyTopupTx()}
-                        disabled={walletBusy}
-                        className="rounded-full border border-[var(--border)] px-3 py-1 text-[11px] font-semibold text-[var(--ink)] hover:border-[var(--border-hover)] hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {walletBusy ? "Verifying..." : "Verify top-up tx"}
-                      </button>
                     </div>
                   )}
                   {walletStatus && (
