@@ -343,6 +343,76 @@ function ProfilePageContent() {
     }
   };
 
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const isRetryableTopupVerifyError = (message: string) => {
+    const lower = message.toLowerCase();
+    return (
+      lower.includes("connection lost while action was in flight") ||
+      lower.includes("network") ||
+      lower.includes("fetch") ||
+      lower.includes("timeout")
+    );
+  };
+
+  const refreshWalletSnapshot = async () => {
+    try {
+      const snapshot = await getMyWalletAopBalance({});
+      setWalletOnChainBalance(
+        snapshot && typeof snapshot.balance === "number" ? snapshot.balance : null
+      );
+    } catch {
+      // no-op
+    }
+  };
+
+  const verifyTopupWithRetries = async (
+    txHash: string,
+    options?: { maxAttempts?: number; delayMs?: number }
+  ) => {
+    const maxAttempts = options?.maxAttempts ?? 5;
+    const delayMs = options?.delayMs ?? 7000;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        const result = (await topUpStakeFromWalletTransfer({
+          txHash,
+        })) as {
+          applied: boolean;
+          amount: number;
+        };
+
+        setWalletStatus(
+          result.applied
+            ? `Top-up confirmed: ${result.amount} AOP added to protocol stake balance.`
+            : `Top-up already processed for ${result.amount} AOP.`
+        );
+        setTopupTxHash(txHash);
+        setTopupTxInput(txHash);
+        setTopupAmount("5");
+        await refreshWalletSnapshot();
+        return true;
+      } catch (err: unknown) {
+        const message = formatErrorMessage(err) || "Top-up verification failed.";
+        const isRetryable = isRetryableTopupVerifyError(message);
+        if (attempt < maxAttempts && isRetryable) {
+          setWalletStatus(
+            `Transfer submitted. Waiting for confirmation (retry ${attempt}/${maxAttempts})...`
+          );
+          await sleep(delayMs);
+          continue;
+        }
+        setWalletStatus(
+          `${message} You can retry verification without sending again using "Verify top-up tx".`
+        );
+        return false;
+      }
+    }
+
+    setWalletStatus(`Top-up verification timed out. You can retry using "Verify top-up tx".`);
+    return false;
+  };
+
   const handleStakeTopup = async () => {
     if (walletBusy) return;
     setWalletStatus(null);
@@ -394,7 +464,6 @@ function ProfilePageContent() {
 
     setWalletBusy(true);
     setTopupTxHash(null);
-    let submittedTxHash: string | null = null;
     try {
       await ethereum.request({
         method: "wallet_requestPermissions",
@@ -448,44 +517,17 @@ function ProfilePageContent() {
         ],
       })) as string;
 
-      submittedTxHash = txHash;
       setTopupTxHash(txHash);
       setTopupTxInput(txHash);
       setWalletStatus("Transfer submitted. Waiting for on-chain confirmation...");
-      const result = (await topUpStakeFromWalletTransfer({ txHash })) as {
-        applied: boolean;
-        amount: number;
-        stakeBalance: number;
-      };
-
-      setWalletStatus(
-        result.applied
-          ? `Top-up confirmed: ${result.amount} AOP added to protocol stake balance.`
-          : `Top-up was already processed for ${result.amount} AOP.`
-      );
-
-      setTopupAmount("5");
-      try {
-        const snapshot = await getMyWalletAopBalance({});
-        setWalletOnChainBalance(
-          snapshot && typeof snapshot.balance === "number" ? snapshot.balance : null
-        );
-      } catch {
-        // no-op
-      }
+      await verifyTopupWithRetries(txHash);
     } catch (err: unknown) {
       const code = (err as { code?: number }).code;
       if (code === 4001) {
         setWalletStatus("Transaction cancelled.");
       } else {
-        const msg = (err as { message?: string })?.message ?? "Stake top-up failed.";
-        if (submittedTxHash) {
-          setWalletStatus(
-            `${msg} You can retry verification without sending again using "Verify top-up tx".`
-          );
-        } else {
-          setWalletStatus(msg);
-        }
+        const msg = formatErrorMessage(err) || "Stake top-up failed.";
+        setWalletStatus(msg);
       }
     } finally {
       setWalletBusy(false);
@@ -505,27 +547,9 @@ function ProfilePageContent() {
     setWalletBusy(true);
     setWalletStatus("Verifying top-up transaction...");
     try {
-      const result = (await topUpStakeFromWalletTransfer({
-        txHash,
-      })) as {
-        applied: boolean;
-        amount: number;
-      };
-      setWalletStatus(
-        result.applied
-          ? `Top-up confirmed: ${result.amount} AOP added to protocol stake balance.`
-          : `Top-up already processed for ${result.amount} AOP.`
-      );
-      try {
-        const snapshot = await getMyWalletAopBalance({});
-        setWalletOnChainBalance(
-          snapshot && typeof snapshot.balance === "number" ? snapshot.balance : null
-        );
-      } catch {
-        // no-op
-      }
+      await verifyTopupWithRetries(txHash, { maxAttempts: 1 });
     } catch (err: unknown) {
-      const msg = (err as { message?: string })?.message ?? "Top-up verification failed.";
+      const msg = formatErrorMessage(err) || "Top-up verification failed.";
       setWalletStatus(msg);
     } finally {
       setWalletBusy(false);
