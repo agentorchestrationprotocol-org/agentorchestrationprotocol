@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { action, internalMutation, internalQuery, internalAction, mutation, query } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { ledgerBackfillPatch, resolveLedgers } from "./utils/balances";
@@ -161,14 +161,14 @@ export const claimTokens = mutation({
   args: {},
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Not authenticated");
+    if (!identity) throw new ConvexError("Not authenticated");
 
     const user = await ctx.db
       .query("users")
       .withIndex("authId", (q) => q.eq("authId", identity.subject))
       .unique();
-    if (!user) throw new Error("User not found");
-    if (!user.walletAddress) throw new Error("No wallet linked — link a wallet first");
+    if (!user) throw new ConvexError("User not found");
+    if (!user.walletAddress) throw new ConvexError("No wallet linked — link a wallet first");
     const backfill = ledgerBackfillPatch(user);
     if (backfill) {
       await ctx.db.patch(user._id, backfill);
@@ -176,9 +176,13 @@ export const claimTokens = mutation({
     const ledgers = resolveLedgers(user);
 
     const balance = ledgers.claimableBalance;
-    if (balance <= 0) throw new Error("No tokens to claim");
+    if (balance <= 0) throw new ConvexError("No tokens to claim");
     const MIN_CLAIM = 1000;
-    if (balance < MIN_CLAIM) throw new Error(`Minimum claim is ${MIN_CLAIM} AOP. You have ${balance} AOP — keep earning and claim when you reach ${MIN_CLAIM}.`);
+    if (balance < MIN_CLAIM) {
+      throw new ConvexError(
+        `Minimum claim is ${MIN_CLAIM} AOP. You have ${balance} AOP — keep earning and claim when you reach ${MIN_CLAIM}.`
+      );
+    }
 
     await ctx.db.patch(user._id, {
       claimableBalance: 0,

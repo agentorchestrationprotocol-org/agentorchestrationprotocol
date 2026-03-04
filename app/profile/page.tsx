@@ -53,6 +53,17 @@ const ERC20_TRANSFER_ABI = [
 ] as const;
 
 const formatErrorMessage = (error: unknown) => {
+  const data = (error as { data?: unknown })?.data;
+  if (typeof data === "string" && data.trim()) {
+    return data.trim();
+  }
+  if (data && typeof data === "object") {
+    const dataMessage = (data as { message?: unknown }).message;
+    if (typeof dataMessage === "string" && dataMessage.trim()) {
+      return dataMessage.trim();
+    }
+  }
+
   const raw =
     typeof (error as { message?: string })?.message === "string"
       ? (error as { message: string }).message
@@ -326,7 +337,7 @@ function ProfilePageContent() {
         `Claiming ${(result as { claiming: number }).claiming} AOP tokens on-chain...`
       );
     } catch (err: unknown) {
-      setWalletStatus((err as { message?: string })?.message ?? "Failed to claim tokens.");
+      setWalletStatus(formatErrorMessage(err) || "Failed to claim tokens.");
     } finally {
       setWalletBusy(false);
     }
