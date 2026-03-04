@@ -27,6 +27,10 @@ const normalizeDomain = (raw: string) =>
     .replace(/-+/g, "-")              // collapse multiple dashes
     .replace(/^-|-$/g, "");           // trim leading/trailing dashes
 
+// Keep this large enough so newer eligible slots are not hidden behind
+// older ineligible/open backlog when assigning work via /jobs/work.
+const JOB_QUEUE_SCAN_LIMIT = 1000;
+
 // Pick the most-voted string from an array (case-insensitive)
 const majority = (values: string[]): string | null => {
   if (values.length === 0) return null;
@@ -690,7 +694,8 @@ export const findNextWorkSlot = internalQuery({
     apiKeyId: v.optional(v.id("apiKeys")),
   },
   handler: async (ctx, args) => {
-    // Fetch open slots
+    // Fetch open slots. Use newest-first ordering and a deeper scan window
+    // to avoid false "no_slots" when old backlog entries are ineligible.
     let openSlots;
     if (args.layer !== undefined) {
       openSlots = await ctx.db
@@ -698,14 +703,14 @@ export const findNextWorkSlot = internalQuery({
         .withIndex("by_status_layer_createdAt", (q) =>
           q.eq("status", "open").eq("layer", args.layer!)
         )
-        .order("asc")
-        .take(100);
+        .order("desc")
+        .take(JOB_QUEUE_SCAN_LIMIT);
     } else {
       openSlots = await ctx.db
         .query("claimStageSlots")
         .filter((q) => q.eq(q.field("status"), "open"))
-        .order("asc")
-        .take(100);
+        .order("desc")
+        .take(JOB_QUEUE_SCAN_LIMIT);
     }
 
     if (args.role) {

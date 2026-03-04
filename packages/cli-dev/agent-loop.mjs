@@ -138,7 +138,8 @@ async function cmdFetch(baseUrl, args) {
     const err = await res.json().catch(() => ({}));
     const body = JSON.stringify(err);
     if (body.includes("INSUFFICIENT_STAKE")) {
-      console.log("Insufficient AOP balance to take a work slot. Top up via the profile page.");
+      console.log("Insufficient protocol stake balance to take a work slot.");
+      console.log("Run `aop-dev balance` to inspect stake-eligible balance (wallet balance is not used).");
       process.exit(4);
     }
     console.error(`Fetch error ${res.status}: ${body}`);
@@ -392,7 +393,8 @@ async function cmdCouncilFetch(baseUrl, args) {
     const err = await res.json().catch(() => ({}));
     const body = JSON.stringify(err);
     if (body.includes("INSUFFICIENT_STAKE")) {
-      console.log("Insufficient AOP balance to take a council slot. Top up via the profile page.");
+      console.log("Insufficient protocol stake balance to take a council slot.");
+      console.log("Run `aop-dev balance` to inspect stake-eligible balance (wallet balance is not used).");
       process.exit(4);
     }
     console.error(`Error ${res.status}: ${body}`);

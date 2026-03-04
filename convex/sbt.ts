@@ -1,6 +1,30 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery, internalAction, mutation, query } from "./_generated/server";
-import { internal } from "./_generated/api";
+import { action, internalMutation, internalQuery, internalAction, mutation, query } from "./_generated/server";
+import { api, internal } from "./_generated/api";
+
+const DEFAULT_STAKE_TOPUP_SINK = "0x000000000000000000000000000000000000dEaD";
+
+const isEvmAddress = (value: string) => /^0x[0-9a-fA-F]{40}$/.test(value);
+
+const getStakeTopupSinkAddress = () =>
+  (process.env.AOP_STAKE_TOPUP_ADDRESS || DEFAULT_STAKE_TOPUP_SINK).trim();
+
+const getActiveChainId = () => (process.env.BASE_RPC_URL ? 8453 : 84532);
+
+type TopupResult = {
+  applied: boolean;
+  txHash: string;
+  amount: number;
+  tokenBalance: number;
+  tokenClaimed: number;
+};
+
+type WalletAopBalanceResult = {
+  walletAddress: string;
+  chainId: number;
+  balanceWei: string;
+  balance: number;
+} | null;
 
 // ── Metadata (served as JSON for tokenURI) ────────────────────────────
 
@@ -231,6 +255,167 @@ export const restoreTokenBalance = internalMutation({
   },
 });
 
+export const getTopupByTxHash = internalQuery({
+  args: { txHash: v.string() },
+  handler: async (ctx, args) => {
+    return ctx.db
+      .query("tokenTopups")
+      .withIndex("by_txHash", (q) => q.eq("txHash", args.txHash))
+      .first();
+  },
+});
+
+export const applyVerifiedTopup = internalMutation({
+  args: {
+    userId: v.id("users"),
+    walletAddress: v.string(),
+    txHash: v.string(),
+    fromAddress: v.string(),
+    toAddress: v.string(),
+    amount: v.number(),
+    amountWei: v.string(),
+    chainId: v.number(),
+    blockNumber: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("tokenTopups")
+      .withIndex("by_txHash", (q) => q.eq("txHash", args.txHash))
+      .first();
+
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new Error("User not found");
+
+    if (existing) {
+      if (existing.userId !== args.userId) {
+        throw new Error("Top-up transaction already used by another account");
+      }
+      return {
+        applied: false,
+        txHash: existing.txHash,
+        amount: existing.amount,
+        tokenBalance: user.tokenBalance ?? 0,
+        tokenClaimed: user.tokenClaimed ?? 0,
+      };
+    }
+
+    const currentClaimed = user.tokenClaimed ?? 0;
+    if (currentClaimed < args.amount) {
+      throw new Error(
+        `Top-up amount (${args.amount} AOP) exceeds your claimable-on-chain ledger (${currentClaimed} AOP)`
+      );
+    }
+
+    const nextBalance = (user.tokenBalance ?? 0) + args.amount;
+    const nextClaimed = currentClaimed - args.amount;
+
+    await ctx.db.insert("tokenTopups", {
+      userId: args.userId,
+      walletAddress: args.walletAddress,
+      txHash: args.txHash,
+      fromAddress: args.fromAddress,
+      toAddress: args.toAddress,
+      amount: args.amount,
+      amountWei: args.amountWei,
+      chainId: args.chainId,
+      blockNumber: args.blockNumber,
+      status: "confirmed",
+      createdAt: Date.now(),
+    });
+
+    await ctx.db.patch(args.userId, {
+      tokenBalance: nextBalance,
+      tokenClaimed: nextClaimed,
+    });
+
+    return {
+      applied: true,
+      txHash: args.txHash,
+      amount: args.amount,
+      tokenBalance: nextBalance,
+      tokenClaimed: nextClaimed,
+    };
+  },
+});
+
+export const topUpStakeFromWalletTransfer = action({
+  args: { txHash: v.string() },
+  handler: async (ctx, args): Promise<TopupResult> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const user = await ctx.runQuery(api.users.getMyProfile, {});
+    if (!user) throw new Error("User not found");
+    if (!user.walletAddress) {
+      throw new Error("No wallet linked — link a wallet first");
+    }
+
+    const txHash = args.txHash.toLowerCase();
+    if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) {
+      throw new Error("Invalid transaction hash");
+    }
+
+    const sinkAddress = getStakeTopupSinkAddress();
+    if (!isEvmAddress(sinkAddress)) {
+      throw new Error("Stake top-up sink is not configured");
+    }
+
+    const existing = await ctx.runQuery(internal.sbt.getTopupByTxHash, { txHash });
+    if (existing) {
+      if (existing.userId !== user._id) {
+        throw new Error("Top-up transaction already used by another account");
+      }
+      return {
+        applied: false,
+        txHash: existing.txHash,
+        amount: existing.amount,
+        tokenBalance: user.tokenBalance ?? 0,
+        tokenClaimed: user.tokenClaimed ?? 0,
+      };
+    }
+
+    const verified = await ctx.runAction(internal.blockchain.verifyStakeTopupTransfer, {
+      txHash,
+      fromAddress: user.walletAddress,
+      toAddress: sinkAddress,
+    });
+
+    return ctx.runMutation(internal.sbt.applyVerifiedTopup, {
+      userId: user._id,
+      walletAddress: user.walletAddress,
+      txHash: verified.txHash,
+      fromAddress: verified.fromAddress,
+      toAddress: verified.toAddress,
+      amount: verified.amount,
+      amountWei: verified.amountWei,
+      chainId: verified.chainId,
+      blockNumber: verified.blockNumber,
+    });
+  },
+});
+
+export const getMyWalletAopBalance = action({
+  args: {},
+  handler: async (ctx): Promise<WalletAopBalanceResult> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+
+    const user = await ctx.runQuery(api.users.getMyProfile, {});
+    if (!user?.walletAddress) return null;
+
+    const onChain = await ctx.runAction(internal.blockchain.readAopTokenBalance, {
+      walletAddress: user.walletAddress,
+    });
+
+    return {
+      walletAddress: user.walletAddress,
+      chainId: onChain.chainId,
+      balanceWei: onChain.balanceWei,
+      balance: onChain.balanceWhole,
+    };
+  },
+});
+
 export const retryMintSBT = mutation({
   args: {},
   handler: async (ctx) => {
@@ -260,8 +445,24 @@ export const retryMintSBT = mutation({
  */
 export const getAopTokenAddress = query({
   args: {},
-  handler: async (_ctx, _args) => {
+  handler: async () => {
     return process.env.AOP_TOKEN_ADDRESS ?? null;
+  },
+});
+
+export const getStakeTopupConfig = query({
+  args: {},
+  handler: async () => {
+    const tokenAddress = process.env.AOP_TOKEN_ADDRESS ?? null;
+    const sinkAddress = getStakeTopupSinkAddress();
+    const chainId = getActiveChainId();
+
+    return {
+      enabled: !!tokenAddress && isEvmAddress(sinkAddress),
+      chainId,
+      tokenAddress,
+      sinkAddress: isEvmAddress(sinkAddress) ? sinkAddress : null,
+    };
   },
 });
 

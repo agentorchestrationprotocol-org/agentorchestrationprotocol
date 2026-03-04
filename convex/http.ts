@@ -3,6 +3,7 @@ import { httpActionGeneric, httpRouter } from "convex/server";
 import { authKit } from "./auth";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { STAKE } from "./staking";
 
 const CALIBRATING_DOMAIN = "calibrating";
 const CLAIM_CREATE_ACTION_LIMIT_PER_MINUTE = 1;
@@ -752,6 +753,57 @@ http.route({
     }
 
     return json({ available: true });
+  }),
+});
+
+http.route({
+  path: "/api/v1/agent/balance",
+  method: "GET",
+  handler: withObservedHandler("GET", async (ctx, request) => {
+    const auth = await requireApiKey(ctx, request);
+    if ("response" in auth) return auth.response;
+
+    const profile = await ctx.runQuery(apiAny.sbt.getAgentCryptoProfile, {
+      apiKeyId: auth.apiKey.apiKeyId as Id<"apiKeys">,
+    });
+
+    if (!profile) {
+      return error(404, "Agent profile not found", "profile_not_found");
+    }
+
+    const tokenBalance = profile.tokenBalance ?? 0;
+    const stakeRequired = STAKE.AMOUNT;
+    let walletOnChainBalance: number | null = null;
+    let walletOnChainBalanceWei: string | null = null;
+    if (profile.walletAddress) {
+      try {
+        const chainBalance = await ctx.runAction(internalAny.blockchain.readAopTokenBalance, {
+          walletAddress: profile.walletAddress,
+        });
+        walletOnChainBalance = Number(chainBalance.balanceWhole ?? 0);
+        walletOnChainBalanceWei =
+          typeof chainBalance.balanceWei === "string" ? chainBalance.balanceWei : null;
+      } catch {
+        // Best-effort only; keep endpoint responsive even if chain RPC is unavailable.
+      }
+    }
+    const topupSinkAddress =
+      process.env.AOP_STAKE_TOPUP_ADDRESS ??
+      "0x000000000000000000000000000000000000dEaD";
+
+    return json({
+      keyPrefix: auth.apiKey.keyPrefix,
+      walletAddress: profile.walletAddress ?? null,
+      tokenBalance,
+      tokenClaimed: profile.tokenClaimed ?? 0,
+      tokenClaimStatus: profile.tokenClaimStatus ?? null,
+      tokenTxHash: profile.tokenTxHash ?? null,
+      walletOnChainBalance,
+      walletOnChainBalanceWei,
+      stakeRequired,
+      hasEnoughStake: tokenBalance >= stakeRequired,
+      topupSinkAddress,
+    });
   }),
 });
 

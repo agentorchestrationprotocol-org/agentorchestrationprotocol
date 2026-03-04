@@ -6,6 +6,7 @@ import { Authenticated, Unauthenticated, useAction, useMutation, useQuery } from
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { encodeFunctionData, parseUnits } from "viem";
 
 const HumanIcon = ({ className }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -37,6 +38,19 @@ const MetaMaskIcon = ({ className }: { className?: string }) => (
     />
   </svg>
 );
+
+const ERC20_TRANSFER_ABI = [
+  {
+    name: "transfer",
+    type: "function",
+    inputs: [
+      { name: "to", type: "address" },
+      { name: "value", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "nonpayable",
+  },
+] as const;
 
 const formatErrorMessage = (error: unknown) => {
   const raw =
@@ -103,6 +117,9 @@ function ProfilePageContent() {
   const claimTokens = useMutation(api.sbt.claimTokens);
   const retryMintSBT = useMutation(api.sbt.retryMintSBT);
   const aopTokenAddress = useQuery(api.sbt.getAopTokenAddress);
+  const topupConfig = useQuery(api.sbt.getStakeTopupConfig);
+  const topUpStakeFromWalletTransfer = useAction(api.sbt.topUpStakeFromWalletTransfer);
+  const getMyWalletAopBalance = useAction(api.sbt.getMyWalletAopBalance);
   const setClaimModeration = useMutation(api.claims.setClaimModeration);
   const setCommentModeration = useMutation(api.comments.setCommentModeration);
   const resolveModerationReport = useMutation(api.claims.resolveModerationReport);
@@ -113,7 +130,10 @@ function ProfilePageContent() {
   const [profileStatus, setProfileStatus] = useState<string | null>(null);
   const [walletBusy, setWalletBusy] = useState(false);
   const [walletStatus, setWalletStatus] = useState<string | null>(null);
-  const [claimBasescanWallet, setClaimBasescanWallet] = useState<string | null>(null);
+  const [walletOnChainBalance, setWalletOnChainBalance] = useState<number | null>(null);
+  const [walletOnChainBalanceLoading, setWalletOnChainBalanceLoading] = useState(false);
+  const [topupAmount, setTopupAmount] = useState<string>("5");
+  const [topupTxHash, setTopupTxHash] = useState<string | null>(null);
   const [moderationStatusFilter, setModerationStatusFilter] = useState<"open" | "resolved">(
     "open"
   );
@@ -195,6 +215,35 @@ function ProfilePageContent() {
     void syncMyUser({});
   }, [profile, syncMyUser]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!profile?.walletAddress) {
+      setWalletOnChainBalance(null);
+      setWalletOnChainBalanceLoading(false);
+      return;
+    }
+
+    setWalletOnChainBalanceLoading(true);
+    void getMyWalletAopBalance({})
+      .then((snapshot) => {
+        if (cancelled) return;
+        const nextBalance =
+          snapshot && typeof snapshot.balance === "number" ? snapshot.balance : null;
+        setWalletOnChainBalance(nextBalance);
+      })
+      .catch(() => {
+        if (!cancelled) setWalletOnChainBalance(null);
+      })
+      .finally(() => {
+        if (!cancelled) setWalletOnChainBalanceLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [profile?.walletAddress, profile?.tokenTxHash, getMyWalletAopBalance]);
+
   const handleSaveProfile = async () => {
     setProfileStatus(null);
     setIsSavingProfile(true);
@@ -260,15 +309,156 @@ function ProfilePageContent() {
     if (walletBusy) return;
     setWalletBusy(true);
     setWalletStatus(null);
-    setClaimBasescanWallet(null);
     try {
       const result = await claimTokens({});
       setWalletStatus(
         `Claiming ${(result as { claiming: number }).claiming} AOP tokens on-chain...`
       );
-      setClaimBasescanWallet(profile?.walletAddress ?? null);
     } catch (err: unknown) {
       setWalletStatus((err as { message?: string })?.message ?? "Failed to claim tokens.");
+    } finally {
+      setWalletBusy(false);
+    }
+  };
+
+  const handleStakeTopup = async () => {
+    if (walletBusy) return;
+    setWalletStatus(null);
+
+    if (!profile?.walletAddress) {
+      setWalletStatus("Connect and link your wallet first.");
+      return;
+    }
+
+    if (!topupConfig?.enabled || !topupConfig.tokenAddress || !topupConfig.sinkAddress) {
+      setWalletStatus("Stake top-up is not configured right now. Try again later.");
+      return;
+    }
+
+    const normalizedTopupAmount = topupAmount.trim();
+    if (!/^\d+$/.test(normalizedTopupAmount)) {
+      setWalletStatus("Enter a valid whole AOP amount to top up.");
+      return;
+    }
+    const parsedTopupAmount = Number(normalizedTopupAmount);
+    if (!Number.isFinite(parsedTopupAmount) || parsedTopupAmount <= 0) {
+      setWalletStatus("Enter a valid whole AOP amount to top up.");
+      return;
+    }
+    if ((profile.tokenClaimed ?? 0) < parsedTopupAmount) {
+      setWalletStatus(
+        `Top-up amount exceeds your claimed-on-chain ledger (${profile.tokenClaimed ?? 0} AOP).`
+      );
+      return;
+    }
+    if (walletOnChainBalance !== null && walletOnChainBalance < parsedTopupAmount) {
+      setWalletStatus(
+        `Wallet balance too low (${walletOnChainBalance} AOP on-chain, ${parsedTopupAmount} requested).`
+      );
+      return;
+    }
+
+    const ethereum = (
+      window as unknown as {
+        ethereum?: {
+          request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+        };
+      }
+    ).ethereum;
+    if (!ethereum) {
+      setWalletStatus("MetaMask not detected. Install the MetaMask browser extension first.");
+      return;
+    }
+
+    setWalletBusy(true);
+    setTopupTxHash(null);
+    try {
+      await ethereum.request({
+        method: "wallet_requestPermissions",
+        params: [{ eth_accounts: {} }],
+      });
+
+      const accounts = (await ethereum.request({ method: "eth_accounts" })) as string[];
+      const fromAddress = accounts[0];
+      if (!fromAddress) {
+        setWalletStatus("No account selected.");
+        return;
+      }
+      if (fromAddress.toLowerCase() !== profile.walletAddress.toLowerCase()) {
+        setWalletStatus(
+          `Selected wallet (${fromAddress}) does not match linked wallet (${profile.walletAddress}).`
+        );
+        return;
+      }
+
+      const expectedChainHex = `0x${Number(topupConfig.chainId).toString(16)}`;
+      const currentChainHex = ((await ethereum.request({ method: "eth_chainId" })) as string).toLowerCase();
+      if (currentChainHex !== expectedChainHex.toLowerCase()) {
+        try {
+          await ethereum.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: expectedChainHex }],
+          });
+        } catch {
+          setWalletStatus(`Switch MetaMask to chain ${topupConfig.chainId} and retry.`);
+          return;
+        }
+      }
+
+      const data = encodeFunctionData({
+        abi: ERC20_TRANSFER_ABI,
+        functionName: "transfer",
+        args: [
+          topupConfig.sinkAddress as `0x${string}`,
+          parseUnits(String(parsedTopupAmount), 18),
+        ],
+      });
+
+      const txHash = (await ethereum.request({
+        method: "eth_sendTransaction",
+        params: [
+          {
+            from: fromAddress,
+            to: topupConfig.tokenAddress,
+            data,
+          },
+        ],
+      })) as string;
+
+      setTopupTxHash(txHash);
+      setWalletStatus("Transfer submitted. Waiting for on-chain confirmation...");
+
+      const result = (await topUpStakeFromWalletTransfer({
+        txHash,
+      })) as {
+        applied: boolean;
+        amount: number;
+        tokenBalance: number;
+      };
+
+      setWalletStatus(
+        result.applied
+          ? `Top-up confirmed: ${result.amount} AOP added to protocol stake balance.`
+          : `Top-up was already processed for ${result.amount} AOP.`
+      );
+
+      setTopupAmount("5");
+      try {
+        const snapshot = await getMyWalletAopBalance({});
+        setWalletOnChainBalance(
+          snapshot && typeof snapshot.balance === "number" ? snapshot.balance : null
+        );
+      } catch {
+        // no-op
+      }
+    } catch (err: unknown) {
+      const code = (err as { code?: number }).code;
+      if (code === 4001) {
+        setWalletStatus("Transaction cancelled.");
+      } else {
+        const msg = (err as { message?: string })?.message ?? "Stake top-up failed.";
+        setWalletStatus(msg);
+      }
     } finally {
       setWalletBusy(false);
     }
@@ -522,30 +712,114 @@ function ProfilePageContent() {
             </div>
 
             <div className="mt-8 flex flex-col gap-8">
-              {/* 1. Balance and Claim Action */}
-              <div className="flex flex-col items-center pt-4 pb-2">
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--muted)]">Available to claim</p>
-                <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-5xl font-bold tracking-tight text-[var(--ink)]">{profile?.tokenBalance ?? 0}</span>
-                  <span className="text-lg font-medium text-[var(--muted)]">AOP</span>
+              {/* 1. Balances and actions */}
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+                    Protocol stake balance
+                  </p>
+                  <p className="mt-3 text-3xl font-bold text-[var(--ink)]">
+                    {profile?.tokenBalance ?? 0}
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--muted)]">
+                    Used for work-slot staking.
+                  </p>
                 </div>
-                {(profile?.tokenClaimed ?? 0) > 0 && (
-                  <div className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--bg-card)] px-3 py-1 shadow-sm">
-                    <span className="text-sm">🏆</span>
-                    <span className="text-xs font-semibold text-[var(--ink)]">{profile?.tokenClaimed} AOP</span>
-                    <span className="text-xs text-[var(--muted)]">claimed on-chain</span>
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+                    Claimed on-chain ledger
+                  </p>
+                  <p className="mt-3 text-3xl font-bold text-[var(--ink)]">
+                    {profile?.tokenClaimed ?? 0}
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--muted)]">
+                    Eligible to top up back into protocol.
+                  </p>
+                </div>
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+                    Wallet on-chain balance
+                  </p>
+                  <p className="mt-3 text-3xl font-bold text-[var(--ink)]">
+                    {walletOnChainBalanceLoading
+                      ? "..."
+                      : walletOnChainBalance === null
+                        ? "—"
+                        : walletOnChainBalance}
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--muted)]">
+                    Live ERC-20 AOP in your linked wallet.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
+                  <p className="text-xs font-semibold text-[var(--ink)]">Claim protocol balance to wallet</p>
+                  <p className="mt-1 text-xs text-[var(--muted)]">
+                    Mints your current protocol balance on-chain.
+                  </p>
+                  {profile?.walletAddress && (profile?.tokenBalance ?? 0) > 0 && !["pending", "confirming"].includes(profile?.tokenClaimStatus ?? "") ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleClaim()}
+                      disabled={walletBusy}
+                      className="mt-4 rounded-full bg-[var(--accent)] px-5 py-2 text-xs font-semibold text-white transition-colors hover:bg-[var(--accent-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {walletBusy ? "Processing..." : `Claim ${profile.tokenBalance} AOP`}
+                    </button>
+                  ) : (
+                    <p className="mt-3 text-xs text-[var(--muted)]">
+                      {profile?.walletAddress ? "No protocol balance available to claim." : "Link wallet to claim."}
+                    </p>
+                  )}
+                </div>
+
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
+                  <p className="text-xs font-semibold text-[var(--ink)]">Top up protocol stake from wallet</p>
+                  <p className="mt-1 text-xs text-[var(--muted)]">
+                    Sends AOP from wallet to protocol sink and restores stakeable balance.
+                  </p>
+                  <div className="mt-3 flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={topupAmount}
+                      onChange={(e) => setTopupAmount(e.target.value)}
+                      className="w-24 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 text-sm text-[var(--ink)] outline-none focus:border-[var(--border-hover)]"
+                    />
+                    <span className="text-xs text-[var(--muted)]">AOP</span>
                   </div>
-                )}
-                {profile?.walletAddress && (profile?.tokenBalance ?? 0) > 0 && !["pending","confirming"].includes(profile?.tokenClaimStatus ?? "") && (
                   <button
                     type="button"
-                    onClick={() => void handleClaim()}
-                    disabled={walletBusy}
-                    className="mt-6 rounded-full bg-[var(--accent)] px-8 py-3 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+                    onClick={() => void handleStakeTopup()}
+                    disabled={
+                      walletBusy ||
+                      !profile?.walletAddress ||
+                      !topupConfig?.enabled ||
+                      (profile?.tokenClaimed ?? 0) <= 0
+                    }
+                    className="mt-3 rounded-full border border-[var(--border)] px-4 py-1.5 text-xs font-semibold text-[var(--ink)] hover:border-[var(--border-hover)] hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {walletBusy ? "Claiming..." : `Claim ${profile.tokenBalance} AOP`}
+                    {walletBusy ? "Processing..." : "Top up stake"}
                   </button>
-                )}
+                  {topupConfig?.sinkAddress && (
+                    <p className="mt-2 break-all text-[10px] text-[var(--muted)]">
+                      Sink: {topupConfig.sinkAddress}
+                    </p>
+                  )}
+                  {topupTxHash && (
+                    <a
+                      href={`https://basescan.org/tx/${topupTxHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-flex text-[11px] font-medium text-[var(--accent)] hover:underline"
+                    >
+                      View top-up tx
+                    </a>
+                  )}
+                </div>
               </div>
 
               {/* 2. Progress Stepper */}

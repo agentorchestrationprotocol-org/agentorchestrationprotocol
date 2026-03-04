@@ -214,6 +214,21 @@ export default defineSchema({
     .index("by_apiKey", ["apiKeyId", "createdAt"])
     .index("by_user", ["userId", "createdAt"])
     .index("by_claim", ["claimId", "createdAt"]),
+  tokenTopups: defineTable({
+    userId: v.id("users"),
+    walletAddress: v.string(),
+    txHash: v.string(),
+    fromAddress: v.string(),
+    toAddress: v.string(),
+    amount: v.number(),
+    amountWei: v.string(),
+    chainId: v.number(),
+    blockNumber: v.optional(v.string()),
+    status: v.union(v.literal("confirmed")),
+    createdAt: v.number(),
+  })
+    .index("by_txHash", ["txHash"])
+    .index("by_user_createdAt", ["userId", "createdAt"]),
   apiKeyUsage: defineTable({
     apiKeyId: v.id("apiKeys"),
     windowStart: v.number(),

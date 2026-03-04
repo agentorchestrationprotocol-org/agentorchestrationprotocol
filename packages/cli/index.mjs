@@ -170,8 +170,9 @@ const isLogin =
   (positional[0] === "auth" && positional[1] === "login");
 const isOrchestrations = positional[0] === "orchestrations";
 const isRun = positional[0] === "run";
+const isBalance = positional[0] === "balance";
 
-if (!isSetup && !isLogin && !isOrchestrations && !isRun) {
+if (!isSetup && !isLogin && !isOrchestrations && !isRun && !isBalance) {
   console.error(`\n  ${c.red}✗${c.reset} Unknown command: ${c.bold}${positional.join(" ")}${c.reset}\n`);
   printHelp();
   process.exit(1);
@@ -193,6 +194,8 @@ const overwriteOrchestrations =
 
 if (isRun) {
   await runPipelineAgent({ flags });
+} else if (isBalance) {
+  await runBalanceCommand({ flags });
 } else if (isOrchestrations) {
   await runOrchestrationsCommand({
     orchestrationsPathOverride,
@@ -350,6 +353,75 @@ function normalizeBaseUrl(value) {
   return value.replace(/\/+$/, "");
 }
 
+function parseStoredToken(rawToken) {
+  if (!rawToken || typeof rawToken !== "object") {
+    return { apiKey: null, apiBaseUrl: null };
+  }
+
+  const token = rawToken;
+  const apiKey = typeof token.apiKey === "string" ? token.apiKey : null;
+  const rawBaseUrl =
+    typeof token.apiBaseUrl === "string"
+      ? token.apiBaseUrl
+      : typeof token.baseUrl === "string"
+        ? token.baseUrl
+        : null;
+
+  return {
+    apiKey,
+    apiBaseUrl: rawBaseUrl ? normalizeBaseUrl(rawBaseUrl) : null,
+  };
+}
+
+async function readStoredToken(path) {
+  try {
+    const raw = JSON.parse(await readFile(path, "utf8"));
+    return parseStoredToken(raw);
+  } catch {
+    return { apiKey: null, apiBaseUrl: null };
+  }
+}
+
+async function responseErrorCode(response) {
+  const headerCode = response.headers.get("x-aop-error-code");
+  if (headerCode) return headerCode;
+
+  try {
+    const payload = await response.clone().json();
+    const rawCode = payload?.error?.code ?? payload?.code;
+    return typeof rawCode === "string" ? rawCode : null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveApiAccess({ apiBaseUrlOverride } = {}) {
+  const tokenPaths = [
+    join(homedir(), ".aop", "token.json"),
+    join(process.cwd(), ".aop", "token.json"),
+  ];
+
+  let apiKey = process.env.AOP_API_KEY;
+  let tokenApiBaseUrl = null;
+  for (const p of tokenPaths) {
+    const token = await readStoredToken(p);
+    if (!apiKey && token.apiKey) apiKey = token.apiKey;
+    if (!tokenApiBaseUrl && token.apiBaseUrl) tokenApiBaseUrl = token.apiBaseUrl;
+    if (apiKey && tokenApiBaseUrl) break;
+  }
+
+  if (!apiKey) return null;
+
+  const apiBase = normalizeBaseUrl(
+    process.env.AOP_BASE_URL ||
+    apiBaseUrlOverride ||
+    tokenApiBaseUrl ||
+    DEFAULT_API_BASE_URL
+  );
+
+  return { apiKey, apiBase };
+}
+
 function printHelp() {
   console.log(`
   ${c.bold}${c.cyan}AOP CLI${c.reset}  ${c.dim}Agent Orchestration Protocol${c.reset}
@@ -359,11 +431,13 @@ function printHelp() {
   ${c.bold}Usage${c.reset}
     ${c.dim}$${c.reset} aop setup ${c.dim}[options]${c.reset}
     ${c.dim}$${c.reset} aop run ${c.dim}[options]${c.reset}
+    ${c.dim}$${c.reset} aop balance
     ${c.dim}$${c.reset} aop orchestrations ${c.dim}[options]${c.reset}
 
   ${c.bold}Commands${c.reset}
     ${c.cyan}setup${c.reset}           Authenticate and save your API key + orchestrations
     ${c.cyan}run${c.reset}             Pick up one open pipeline slot and work on it (requires claude CLI)
+    ${c.cyan}balance${c.reset}         Show protocol stake balance used for work-slot eligibility
     ${c.cyan}orchestrations${c.reset}  (Re)install the bundled orchestration files
 
   ${c.bold}Setup options${c.reset}
@@ -406,8 +480,71 @@ function printHelp() {
     ${c.dim}$${c.reset} aop run --engine openclaw/ops
     ${c.dim}$${c.reset} aop run --engine google/gemini-2.5-flash --mode council
     ${c.dim}$${c.reset} aop run --layer 4 --role critic
+    ${c.dim}$${c.reset} aop balance
     ${c.dim}$${c.reset} aop orchestrations --overwrite-orchestrations
 `);
+}
+
+async function runBalanceCommand({ flags }) {
+  const apiAccess = await resolveApiAccess({ apiBaseUrlOverride: flags.apiBaseUrl });
+  if (!apiAccess) {
+    console.error(`\n  ${c.red}✗${c.reset} No API key found. Run ${c.bold}aop setup${c.reset} first.\n`);
+    process.exit(1);
+  }
+
+  const { apiKey, apiBase } = apiAccess;
+  const res = await fetch(`${apiBase}/api/v1/agent/balance`, {
+    headers: { authorization: `Bearer ${apiKey}` },
+  });
+
+  if (!res.ok) {
+    const code = await responseErrorCode(res);
+    const payload = await safeJson(res);
+    const message =
+      payload?.error?.message ||
+      payload?.message ||
+      `${res.status} ${res.statusText}`;
+    console.error(
+      `\n  ${c.red}✗${c.reset} Failed to fetch balance: ${message}${code ? ` (${code})` : ""}\n`,
+    );
+    process.exit(1);
+  }
+
+  const balance = await res.json();
+  const tokenBalance = Number(balance.tokenBalance ?? 0);
+  const tokenClaimed = Number(balance.tokenClaimed ?? 0);
+  const walletOnChainBalance =
+    balance.walletOnChainBalance === null || balance.walletOnChainBalance === undefined
+      ? null
+      : Number(balance.walletOnChainBalance);
+  const stakeRequired = Number(balance.stakeRequired ?? 5);
+  const hasEnoughStake =
+    typeof balance.hasEnoughStake === "boolean"
+      ? balance.hasEnoughStake
+      : tokenBalance >= stakeRequired;
+
+  console.log("");
+  console.log(`  ${c.bold}${c.cyan}AOP Balance${c.reset}`);
+  console.log(`  ${c.dim}API base: ${apiBase}${c.reset}`);
+  console.log(`  ${c.dim}Key: ${balance.keyPrefix ?? apiKey.split("_").slice(0, 2).join("_")}_...${c.reset}`);
+  console.log("");
+  console.log(`  ${c.bold}Protocol stake balance:${c.reset} ${c.cyan}${tokenBalance}${c.reset} AOP`);
+  console.log(`  ${c.bold}Required per work slot:${c.reset} ${stakeRequired} AOP`);
+  console.log(`  ${c.bold}Work-slot eligible:${c.reset} ${hasEnoughStake ? `${c.green}yes${c.reset}` : `${c.yellow}no${c.reset}`}`);
+  console.log(`  ${c.bold}Linked wallet:${c.reset} ${balance.walletAddress ?? "not linked"}`);
+  if (walletOnChainBalance !== null && Number.isFinite(walletOnChainBalance)) {
+    console.log(`  ${c.bold}Wallet on-chain balance:${c.reset} ${walletOnChainBalance} AOP`);
+  }
+  console.log(`  ${c.bold}Claimed on-chain total:${c.reset} ${tokenClaimed} AOP`);
+  if (balance.topupSinkAddress) {
+    console.log(`  ${c.bold}Stake top-up sink:${c.reset} ${balance.topupSinkAddress}`);
+  }
+  if (balance.tokenClaimStatus) {
+    console.log(`  ${c.bold}Last claim status:${c.reset} ${balance.tokenClaimStatus}`);
+  }
+  console.log("");
+  console.log(`  ${c.dim}Note: work-slot staking uses protocol balance above, not wallet token balance.${c.reset}`);
+  console.log("");
 }
 
 async function runPipelineAgent({ flags }) {
@@ -491,24 +628,13 @@ async function runPipelineAgent({ flags }) {
     .replace("node scripts/agent-loop.mjs", `node ${agentLoopPath}`)
     .replace("FETCH_ARGS_PLACEHOLDER", fetchArgs);
 
-  // ── Resolve API key ───────────────────────────────────────────────
-  let apiKey = process.env.AOP_API_KEY;
-  if (!apiKey) {
-    for (const p of [
-      join(homedir(), ".aop", "token.json"),
-      join(process.cwd(), ".aop", "token.json"),
-    ]) {
-      try {
-        apiKey = JSON.parse(await readFile(p, "utf8")).apiKey;
-        if (apiKey) break;
-      } catch { /* not found */ }
-    }
-  }
-
-  if (!apiKey) {
-    console.error(`\n  ${c.red}✗${c.reset} No API key found. Run ${c.bold}aop-dev setup${c.reset} first.\n`);
+  // ── Resolve API key + API base ────────────────────────────────────
+  const apiAccess = await resolveApiAccess({ apiBaseUrlOverride: flags.apiBaseUrl });
+  if (!apiAccess) {
+    console.error(`\n  ${c.red}✗${c.reset} No API key found. Run ${c.bold}aop setup${c.reset} first.\n`);
     process.exit(1);
   }
+  const { apiKey, apiBase } = apiAccess;
 
   // ── Log + spawn ───────────────────────────────────────────────────
   const modeLabel = mode === "council" ? "council" : "pipeline";
@@ -528,8 +654,6 @@ async function runPipelineAgent({ flags }) {
   const autoInterval = typeof flags.auto === "number" ? flags.auto : 30;
   let runCount = 0;
 
-  const apiBase = process.env.AOP_BASE_URL || DEFAULT_API_BASE_URL;
-
   const spawnEnv = {
     ...process.env,
     AOP_API_KEY: apiKey,
@@ -537,7 +661,8 @@ async function runPipelineAgent({ flags }) {
     ...(modelArg ? { AOP_AGENT_MODEL: modelArg } : {}),
   };
 
-  // Pre-check: returns 0 (slots available), 2 (no slots), 3 (conflict), 4 (stake)
+  // Pre-check: returns 0 (unknown/available), 2 (no slots), 4 (insufficient stake)
+  let peekUnavailableWarned = false;
   const peekSlots = async () => {
     try {
       const params = new URLSearchParams();
@@ -547,10 +672,19 @@ async function runPipelineAgent({ flags }) {
       const res = await fetch(`${apiBase}/api/v1/jobs/peek${qs}`, {
         headers: { authorization: `Bearer ${apiKey}` },
       });
-      if (res.status === 404) return 2;
-      if (res.status === 402) return 4;
       if (res.ok) return 0;
-      return 2;
+
+      const code = (await responseErrorCode(res))?.toLowerCase();
+      if (res.status === 404 && code === "no_slots") return 2;
+      if (res.status === 402 || code === "insufficient_stake") return 4;
+
+      if (!peekUnavailableWarned) {
+        console.log(
+          `\n  ${c.dim}Peek check unavailable (${res.status}${code ? `: ${code}` : ""}) — continuing with direct fetch.${c.reset}`
+        );
+        peekUnavailableWarned = true;
+      }
+      return 0;
     } catch {
       return 0; // network error → let the engine try anyway
     }
@@ -575,20 +709,20 @@ async function runPipelineAgent({ flags }) {
       if (peekCode === 2) {
         const waitSecs = Math.max(10, Math.floor(autoInterval / 2));
         if (!autoMode) {
-          console.log(`\n  💤 ${c.dim}No open slots right now.${c.reset}\n`);
+          console.log(`\n  💤 ${c.dim}No eligible open slots for this API key right now.${c.reset}\n`);
           process.exit(2);
         }
-        console.log(`\n  💤 ${c.dim}No open slots — checking again in ${waitSecs}s${c.reset}`);
+        console.log(`\n  💤 ${c.dim}No eligible open slots for this API key — checking again in ${waitSecs}s${c.reset}`);
         await new Promise((resolve) => setTimeout(resolve, waitSecs * 1000));
         continue;
       }
       if (peekCode === 4) {
         const waitSecs = autoInterval * 5;
         if (!autoMode) {
-          console.log(`\n  ${c.yellow}⚠️${c.reset}  Insufficient AOP stake.\n`);
+          console.log(`\n  ${c.yellow}⚠️${c.reset}  Insufficient protocol stake balance. Run ${c.bold}aop balance${c.reset}.\n`);
           process.exit(4);
         }
-        console.log(`\n  ${c.yellow}⚠️${c.reset}  Insufficient AOP stake — waiting ${waitSecs}s${c.dim} (top up via profile page)${c.reset}`);
+        console.log(`\n  ${c.yellow}⚠️${c.reset}  Insufficient protocol stake balance — waiting ${waitSecs}s${c.dim} (check ${c.reset}${c.bold}aop balance${c.reset}${c.dim})${c.reset}`);
         await new Promise((resolve) => setTimeout(resolve, waitSecs * 1000));
         continue;
       }
@@ -651,7 +785,7 @@ async function runPipelineAgent({ flags }) {
     if (exitCode === 2) {
       // No work available
       waitSecs = Math.max(10, Math.floor(autoInterval / 2));
-      statusLine = `  💤 ${c.dim}No open slots right now — checking again in ${waitSecs}s${c.reset}`;
+      statusLine = `  💤 ${c.dim}No eligible open slots for this API key — checking again in ${waitSecs}s${c.reset}`;
     } else if (exitCode === 3) {
       // Slot conflict (taken by another agent)
       waitSecs = 5;
@@ -659,7 +793,7 @@ async function runPipelineAgent({ flags }) {
     } else if (exitCode === 4) {
       // Insufficient stake balance
       waitSecs = autoInterval * 5;
-      statusLine = `  ${c.yellow}⚠️${c.reset}  Insufficient AOP stake — waiting ${waitSecs}s${c.dim} (top up via profile page)${c.reset}`;
+      statusLine = `  ${c.yellow}⚠️${c.reset}  Insufficient protocol stake balance — waiting ${waitSecs}s${c.dim} (check ${c.reset}${c.bold}aop balance${c.reset}${c.dim})${c.reset}`;
     } else {
       // Slot completed (exit 0) or unknown
       waitSecs = autoInterval;
@@ -734,13 +868,8 @@ async function runSetup({
       : [HOME_TOKEN_PATH, CWD_TOKEN_PATH];
 
     for (const p of candidatePaths) {
-      let existing;
-      try {
-        existing = JSON.parse(await readFile(p, "utf8"));
-      } catch {
-        continue;
-      }
-      if (!existing?.apiKey) continue;
+      const existing = await readStoredToken(p);
+      if (!existing.apiKey) continue;
 
       const prefix = existing.apiKey.split("_").slice(0, 2).join("_");
       console.log("");
@@ -748,6 +877,9 @@ async function runSetup({
       console.log("");
       console.log(`  ${c.green}✔${c.reset} Already authenticated at ${c.bold}${p}${c.reset}`);
       console.log(`  ${c.dim}Key prefix: ${prefix}_...${c.reset}`);
+      if (existing.apiBaseUrl) {
+        console.log(`  ${c.dim}API base: ${existing.apiBaseUrl}${c.reset}`);
+      }
       console.log("");
       console.log(`  Run ${c.bold}aop run${c.reset} to start working.`);
       console.log(`  Run ${c.bold}aop setup --force${c.reset} to create a new agent key.`);
@@ -882,7 +1014,10 @@ async function runDeviceFlow({
       process.stdout.write(`\r  ${c.green}✔${c.reset} Authorized!${" ".repeat(20)}\n`);
 
       const tokenPath = tokenPathOverride || HOME_TOKEN_PATH;
-      await saveToken(tokenPath, tokenPayload.apiKey);
+      await saveToken(tokenPath, {
+        apiKey: tokenPayload.apiKey,
+        apiBaseUrl,
+      });
       console.log(
         `  ${c.green}✔${c.reset} API key saved to ${c.bold}${tokenPath}${c.reset}`,
       );
@@ -1189,9 +1324,18 @@ agents is the point.
   await writeFile(path, content);
 }
 
-async function saveToken(path, apiKey) {
+async function saveToken(path, tokenData) {
+  const token =
+    typeof tokenData === "string"
+      ? { apiKey: tokenData }
+      : {
+          apiKey: tokenData.apiKey,
+          ...(tokenData.apiBaseUrl
+            ? { apiBaseUrl: normalizeBaseUrl(tokenData.apiBaseUrl) }
+            : {}),
+        };
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, JSON.stringify({ apiKey }, null, 2) + "\n");
+  await writeFile(path, JSON.stringify(token, null, 2) + "\n");
 }
 
 function sleep(ms) {

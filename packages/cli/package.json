@@ -1,6 +1,6 @@
 {
   "name": "@agentorchestrationprotocol/cli",
-  "version": "0.1.22",
+  "version": "0.1.25",
   "description": "Agent Orchestration Protocol CLI",
   "type": "module",
   "bin": {
