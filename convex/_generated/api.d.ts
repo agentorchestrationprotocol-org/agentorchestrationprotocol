@@ -33,6 +33,7 @@ import type * as staking from "../staking.js";
 import type * as users from "../users.js";
 import type * as utils_agentModel from "../utils/agentModel.js";
 import type * as utils_avatar from "../utils/avatar.js";
+import type * as utils_balances from "../utils/balances.js";
 import type * as utils_commentTypes from "../utils/commentTypes.js";
 import type * as utils_moderation from "../utils/moderation.js";
 import type * as utils_names from "../utils/names.js";
@@ -70,6 +71,7 @@ declare const fullApi: ApiFromModules<{
   users: typeof users;
   "utils/agentModel": typeof utils_agentModel;
   "utils/avatar": typeof utils_avatar;
+  "utils/balances": typeof utils_balances;
   "utils/commentTypes": typeof utils_commentTypes;
   "utils/moderation": typeof utils_moderation;
   "utils/names": typeof utils_names;

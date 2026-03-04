@@ -28,7 +28,7 @@ This distinction is important.
 | **SBT** | The user's on-chain identity token, tied to their wallet | Permanent, non-transferable |
 | **API key (agent)** | A key that authorises a process to participate in pipelines | Ephemeral — can be created, revoked, forgotten |
 
-The SBT belongs to the **user**, not to any individual API key. A user can create many API keys over time — different machines, different models, different projects. All of them contribute reputation and token balance to the same user account, and therefore to the same SBT. Losing or revoking an API key has no effect on the SBT or accumulated reputation.
+The SBT belongs to the **user**, not to any individual API key. A user can create many API keys over time — different machines, different models, different projects. All of them contribute reputation and rewards to the same user account, and therefore to the same SBT. Losing or revoking an API key has no effect on the SBT or accumulated reputation.
 
 **Example:** A user creates an API key, runs 50 pipeline slots, then forgets the key. They create a new key with `setup --force`. The new agent starts earning from where the user left off — the SBT still reflects 50 slots completed, plus everything the new agent earns.
 
@@ -38,12 +38,12 @@ The SBT is the **persistent anchor**. API keys are tools the user deploys to ear
 
 One soulbound NFT per **user account**. Minted automatically when the user links their wallet for the first time.
 
-- **Bound to the user, not any API key** — losing or revoking a key has no effect on the SBT or token balance
+- **Bound to the user, not any API key** — losing or revoking a key has no effect on the SBT or user ledgers
 - **Non-transferable** — `transferFrom` reverts with `"AgentSBT: soulbound"`. The reputation that earned the SBT cannot be sold or transferred — it is permanently tied to the wallet that earned it
 - **Metadata aggregates all keys** — `slots completed` on the SBT counts across every API key the user has ever had, not just the current one
 - **Metadata is live** — served dynamically from the AOP API: `tokenURI(42)` → `https://academic-condor-853.convex.site/api/v1/sbt/42`. The on-chain token reflects current stats without re-minting
 - **Image** — uses the user's profile picture (or primary agent avatar as fallback)
-- **Attributes** — alias, model (of primary active key), total slots completed across all keys, token balance, join date
+- **Attributes** — alias, model (of primary active key), total slots completed across all keys, claimable balance, stake balance, join date
 - **setBaseURI** — owner can update the metadata URL (for when a custom domain is purchased)
 
 ### Updating the metadata URL (future)
@@ -106,7 +106,7 @@ The protocol is designed to run indefinitely. Capping at e.g. 1B tokens would ev
 
 ### DB-first design
 
-Token balance is tracked in `users.tokenBalance` — tied to the user account, not any individual API key. The on-chain `mint()` only fires when the user explicitly claims from the profile page. If the blockchain transaction fails, the balance is automatically restored.
+Rewards and staking are tracked in split ledgers on the user record: `users.claimableBalance` (mintable rewards) and `users.stakeBalance` (non-claimable staking collateral). The on-chain `mint()` only fires when the user explicitly claims from the profile page. If the blockchain transaction fails, claimable balance is automatically restored.
 
 ---
 
@@ -124,13 +124,13 @@ One wallet per user account. One SBT per wallet.
 
 ## Token Claiming Flow
 
-1. User accumulates `tokenBalance` in the DB as their agents complete slots (all API keys under the same account contribute to one balance)
-2. On `/profile?tab=keys`, **"Claim N AOP"** button appears when balance > 0
-3. Click → DB balance is zeroed → `mintTokensForAgent` action fires
+1. User accumulates `claimableBalance` in the DB as agents complete slots (all API keys under the same account contribute to one claimable ledger)
+2. On `/profile?tab=wallet`, **"Claim N AOP"** button appears when claimable balance > 0
+3. Click → claimable balance is zeroed (stake balance unchanged) → `mintTokensForAgent` action fires
 4. `AOPToken.mint(walletAddress, amount * 1e18)` is called on-chain
 5. Tokens appear in the agent's wallet
 
-If the on-chain mint fails, `restoreTokenBalance` rollback fires and the DB balance is restored.
+If the on-chain mint fails, `restoreTokenBalance` rollback fires and claimable balance is restored.
 
 ### Viewing AOP in MetaMask
 

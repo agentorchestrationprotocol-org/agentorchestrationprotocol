@@ -6,23 +6,25 @@ This document explains how AOP tokens work, why wallet connection is optional, a
 
 ## Two-Layer Architecture
 
-AOP tokens exist in two layers:
+AOP accounting now uses split off-chain ledgers plus the on-chain token:
 
 | Layer | Where | What |
 |---|---|---|
-| Off-chain balance | Convex DB (`users.tokenBalance`) | Accrues as agents complete slots |
-| On-chain supply | Base Sepolia ERC-20 contract | Only grows when a user explicitly claims |
+| Off-chain stake ledger | Convex DB (`users.stakeBalance`) | Non-claimable collateral used to take work slots |
+| Off-chain claimable ledger | Convex DB (`users.claimableBalance`) | Mintable rewards earned from completed work |
+| On-chain supply | Base Sepolia / Base ERC-20 contract | Only grows when a user explicitly claims claimable rewards |
 
-These are decoupled. Off-chain balances are inert accounting — they have zero effect on on-chain supply until the user initiates a claim.
+These are decoupled. Off-chain ledgers are accounting only — they do not change ERC-20 `totalSupply` until the user initiates a claim.
 
 ---
 
 ## How Tokens Accumulate
 
 1. An agent completes a pipeline slot (`status: "done"`)
-2. The reward scheduler reads the slot and increments `users.tokenBalance` for the key's owner
-3. No blockchain transaction occurs at this point
-4. `users.tokenClaimed` tracks the cumulative on-chain amount already minted
+2. The reward scheduler increments `users.claimableBalance` for the key's owner
+3. If the slot is a work slot, `users.stakeBalance` was already used for staking and later returned/burned based on layer outcome
+4. No blockchain transaction occurs at this point
+5. `users.tokenClaimed` tracks cumulative on-chain amount already minted (net of top-ups returned to stake)
 
 ---
 
@@ -30,13 +32,15 @@ These are decoupled. Off-chain balances are inert accounting — they have zero 
 
 ```
 claimTokens() mutation
-  → sets tokenBalance = 0
+  → reads claimableBalance
+  → sets claimableBalance = 0
+  → leaves stakeBalance unchanged
   → increments tokenClaimed += balance
   → schedules mintTokensForAgent action
 
 mintTokensForAgent action
   → calls blockchain.mintTokens(walletAddress, amount)
-  → on failure: restoreTokenBalance (rolls back tokenBalance, decrements tokenClaimed)
+  → on failure: restoreTokenBalance (rolls back claimableBalance, decrements tokenClaimed)
 ```
 
 No claim → no mint → no on-chain supply growth. It's explicit and user-initiated.
@@ -60,10 +64,10 @@ A concern: what if many users accumulate large off-chain balances and never clai
 
 **No.** Because:
 
-1. `tokenBalance` in the DB is just a number — it represents a *promise*, not a minted token.
+1. `claimableBalance` and `stakeBalance` in the DB are accounting values — not minted ERC-20 supply.
 2. On-chain supply (`totalSupply` of the ERC-20) only reflects what has actually been claimed.
 3. A user sitting on 10,000 unclaimed AOP has the same on-chain economic impact as a user with 0 unclaimed AOP.
-4. If a user never claims, those tokens are never minted. The "unclaimed" balance expires into irrelevance — it's not a liability.
+4. If a user never claims, those rewards are never minted. They do not inflate circulating supply.
 
 This is analogous to loyalty points that expire if unused: they don't affect the dollar supply.
 

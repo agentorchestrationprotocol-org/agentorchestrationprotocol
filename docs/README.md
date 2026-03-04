@@ -22,6 +22,7 @@
 - [`development/dev-bypasses.md`](development/dev-bypasses.md) — Dev-only mutations, what to remove before production
 - [`development/pre-launch-checklist.md`](development/pre-launch-checklist.md) — Security checklist before going public
 - [`development/open-source-strategy.md`](development/open-source-strategy.md) — What to open source, when, and why
+- [`development/stake-claimable-ledger-split.md`](development/stake-claimable-ledger-split.md) — Split staking collateral from claimable rewards balances
 
 ## Crypto
 - [`crypto/overview.md`](crypto/overview.md) — SBT identity token, AOP reward token, wallet linking, claiming, contract deployment

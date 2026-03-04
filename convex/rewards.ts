@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, query } from "./_generated/server";
+import { ledgerBackfillPatch, resolveLedgers } from "./utils/balances";
 
 // Token amounts per event
 export const REWARD = {
@@ -11,7 +12,7 @@ export const REWARD = {
 
 /**
  * Award tokens to the user who owns an API key for completing a slot.
- * Records a tokenRewards entry and increments user.tokenBalance.
+ * Records a tokenRewards entry and increments user.claimableBalance.
  */
 export const awardSlotReward = internalMutation({
   args: {
@@ -29,6 +30,11 @@ export const awardSlotReward = internalMutation({
       .withIndex("authId", (q) => q.eq("authId", agent.ownerAuthId))
       .unique();
     if (!user) return;
+    const backfill = ledgerBackfillPatch(user);
+    if (backfill) {
+      await ctx.db.patch(user._id, backfill);
+    }
+    const ledgers = resolveLedgers(user);
 
     const amount = args.slotType === "work" ? REWARD.SLOT_WORK : REWARD.SLOT_CONSENSUS;
     const reason = args.slotType === "work" ? "slot_work" : "slot_consensus";
@@ -44,7 +50,8 @@ export const awardSlotReward = internalMutation({
     });
 
     await ctx.db.patch(user._id, {
-      tokenBalance: (user.tokenBalance ?? 0) + amount,
+      claimableBalance: ledgers.claimableBalance + amount,
+      tokenBalance: 0,
     });
   },
 });
@@ -86,6 +93,11 @@ export const awardLayerBonus = internalMutation({
         .withIndex("authId", (q) => q.eq("authId", agent.ownerAuthId))
         .unique();
       if (!user) continue;
+      const backfill = ledgerBackfillPatch(user);
+      if (backfill) {
+        await ctx.db.patch(user._id, backfill);
+      }
+      const ledgers = resolveLedgers(user);
       if (seen.has(user._id)) continue;
       seen.add(user._id);
 
@@ -100,7 +112,8 @@ export const awardLayerBonus = internalMutation({
       });
 
       await ctx.db.patch(user._id, {
-        tokenBalance: (user.tokenBalance ?? 0) + REWARD.LAYER_BONUS,
+        claimableBalance: ledgers.claimableBalance + REWARD.LAYER_BONUS,
+        tokenBalance: 0,
       });
     }
   },
@@ -138,6 +151,11 @@ export const awardPipelineBonus = internalMutation({
         .withIndex("authId", (q) => q.eq("authId", agent.ownerAuthId))
         .unique();
       if (!user) continue;
+      const backfill = ledgerBackfillPatch(user);
+      if (backfill) {
+        await ctx.db.patch(user._id, backfill);
+      }
+      const ledgers = resolveLedgers(user);
       if (seen.has(user._id)) continue;
       seen.add(user._id);
 
@@ -151,7 +169,8 @@ export const awardPipelineBonus = internalMutation({
       });
 
       await ctx.db.patch(user._id, {
-        tokenBalance: (user.tokenBalance ?? 0) + REWARD.PIPELINE_BONUS,
+        claimableBalance: ledgers.claimableBalance + REWARD.PIPELINE_BONUS,
+        tokenBalance: 0,
       });
     }
   },
@@ -174,6 +193,11 @@ export const awardRoleSlotReward = internalMutation({
       .withIndex("authId", (q) => q.eq("authId", agent.ownerAuthId))
       .unique();
     if (!user) return;
+    const backfill = ledgerBackfillPatch(user);
+    if (backfill) {
+      await ctx.db.patch(user._id, backfill);
+    }
+    const ledgers = resolveLedgers(user);
 
     await ctx.db.insert("tokenRewards", {
       apiKeyId: args.apiKeyId,
@@ -185,7 +209,8 @@ export const awardRoleSlotReward = internalMutation({
     });
 
     await ctx.db.patch(user._id, {
-      tokenBalance: (user.tokenBalance ?? 0) + REWARD.SLOT_WORK,
+      claimableBalance: ledgers.claimableBalance + REWARD.SLOT_WORK,
+      tokenBalance: 0,
     });
   },
 });
@@ -193,7 +218,7 @@ export const awardRoleSlotReward = internalMutation({
 // ── Public queries ────────────────────────────────────────────────────
 
 /**
- * Top users by total AOP earned (balance + claimed).
+ * Top users by total AOP earned (claimable + claimed).
  * Used by the /leaderboard page.
  */
 export const getLeaderboard = query({
@@ -204,15 +229,21 @@ export const getLeaderboard = query({
     const allUsers = await ctx.db.query("users").collect();
 
     return allUsers
-      .map((u) => ({
-        _id: u._id,
-        alias: u.alias,
-        profilePictureUrl: u.profilePictureUrl,
-        sbtTokenId: u.sbtTokenId,
-        tokenBalance: u.tokenBalance ?? 0,
-        tokenClaimed: u.tokenClaimed ?? 0,
-        totalEarned: (u.tokenBalance ?? 0) + (u.tokenClaimed ?? 0),
-      }))
+      .map((u) => {
+        const ledgers = resolveLedgers(u);
+        const tokenClaimed = u.tokenClaimed ?? 0;
+        return {
+          _id: u._id,
+          alias: u.alias,
+          profilePictureUrl: u.profilePictureUrl,
+          sbtTokenId: u.sbtTokenId,
+          claimableBalance: ledgers.claimableBalance,
+          stakeBalance: ledgers.stakeBalance,
+          tokenBalance: ledgers.claimableBalance, // back-compat for existing UI consumers
+          tokenClaimed,
+          totalEarned: ledgers.claimableBalance + tokenClaimed,
+        };
+      })
       .filter((u) => u.totalEarned > 0)
       .sort((a, b) => b.totalEarned - a.totalEarned)
       .slice(0, limit);

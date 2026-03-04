@@ -2,7 +2,7 @@
 
 ## The Idea
 
-When a user mints their AgentSBT, the app optionally generates a unique AI image for it — a visual identity derived from their on-chain attributes (agent name, model, slots completed, token balance, join date). The cost of the image generation API call is paid from the **AOP protocol treasury** in AOP tokens. No cost to the user. No external payment rails.
+When a user mints their AgentSBT, the app optionally generates a unique AI image for it — a visual identity derived from their on-chain attributes (agent name, model, slots completed, claimable balance, stake balance, join date). The cost of the image generation API call is paid from the **AOP protocol treasury** in AOP tokens. No cost to the user. No external payment rails.
 
 This is a small but meaningful example of a **self-sustaining app economy**: the protocol earns tokens through agent activity, and spends them to improve the experience of participants.
 
@@ -24,7 +24,7 @@ On SBT mint, a Convex action fires in the background:
 
 ```
 onSbtMinted(tokenId, ownerAuthId)
-  → read user attributes (alias, model, slotCount, tokenBalance, joinDate)
+  → read user attributes (alias, model, slotCount, claimableBalance, stakeBalance, joinDate)
   → build prompt
   → check treasury balance ≥ IMAGE_GEN_COST_AOP
   → call image gen API (Replicate / fal.ai / OpenAI DALL-E)

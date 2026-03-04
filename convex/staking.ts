@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import { ledgerBackfillPatch, resolveLedgers } from "./utils/balances";
 
 /**
  * Proof of Intelligence — Step 2: Staking + Slashing
@@ -43,10 +44,17 @@ export async function deductStakeHandler(
     .unique();
   if (!user) return;
 
-  const balance = user.tokenBalance ?? 0;
-  if (balance < STAKE.AMOUNT) throw new Error("INSUFFICIENT_STAKE");
+  const backfill = ledgerBackfillPatch(user, STAKE.INITIAL_GRANT);
+  if (backfill) {
+    await ctx.db.patch(user._id, backfill);
+  }
+  const ledgers = resolveLedgers(user, STAKE.INITIAL_GRANT);
+  if (ledgers.stakeBalance < STAKE.AMOUNT) throw new Error("INSUFFICIENT_STAKE");
 
-  await ctx.db.patch(user._id, { tokenBalance: balance - STAKE.AMOUNT });
+  await ctx.db.patch(user._id, {
+    stakeBalance: ledgers.stakeBalance - STAKE.AMOUNT,
+    tokenBalance: 0,
+  });
   await ctx.db.patch(slotId, { stakeAmount: STAKE.AMOUNT });
 }
 
@@ -83,9 +91,15 @@ export async function releaseStakesHandler(
       .withIndex("authId", (q) => q.eq("authId", agent.ownerAuthId))
       .unique();
     if (!user) continue;
+    const backfill = ledgerBackfillPatch(user, STAKE.INITIAL_GRANT);
+    if (backfill) {
+      await ctx.db.patch(user._id, backfill);
+    }
+    const ledgers = resolveLedgers(user, STAKE.INITIAL_GRANT);
 
     await ctx.db.patch(user._id, {
-      tokenBalance: (user.tokenBalance ?? 0) + slot.stakeAmount,
+      stakeBalance: ledgers.stakeBalance + slot.stakeAmount,
+      tokenBalance: 0,
     });
     // Zero out so we don't double-release
     await ctx.db.patch(slot._id, { stakeAmount: 0 });

@@ -172,7 +172,17 @@ function ProfilePageContent() {
     [keys]
   );
 
-  const totalEarned = (profile?.tokenBalance ?? 0) + (profile?.tokenClaimed ?? 0);
+  const LEGACY_STAKE_MIGRATION_CAP = 50;
+  const legacyTokenBalance = Math.max(0, profile?.tokenBalance ?? 0);
+  const stakeBalance =
+    typeof profile?.stakeBalance === "number"
+      ? profile.stakeBalance
+      : Math.min(legacyTokenBalance, LEGACY_STAKE_MIGRATION_CAP);
+  const claimableBalance =
+    typeof profile?.claimableBalance === "number"
+      ? profile.claimableBalance
+      : Math.max(0, legacyTokenBalance - stakeBalance);
+  const totalEarned = claimableBalance + (profile?.tokenClaimed ?? 0);
 
   const moderationQueue = useQuery(
     api.claims.listModerationQueue,
@@ -434,7 +444,7 @@ function ProfilePageContent() {
       const result = (await topUpStakeFromWalletTransfer({ txHash })) as {
         applied: boolean;
         amount: number;
-        tokenBalance: number;
+        stakeBalance: number;
       };
 
       setWalletStatus(
@@ -760,16 +770,27 @@ function ProfilePageContent() {
 
             <div className="mt-8 flex flex-col gap-8">
               {/* 1. Balances and actions */}
-              <div className="grid gap-4 sm:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
                     Protocol stake balance
                   </p>
                   <p className="mt-3 text-3xl font-bold text-[var(--ink)]">
-                    {profile?.tokenBalance ?? 0}
+                    {stakeBalance}
                   </p>
                   <p className="mt-1 text-xs text-[var(--muted)]">
                     Used for work-slot staking.
+                  </p>
+                </div>
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+                    Claimable rewards balance
+                  </p>
+                  <p className="mt-3 text-3xl font-bold text-[var(--ink)]">
+                    {claimableBalance}
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--muted)]">
+                    Available to mint on-chain.
                   </p>
                 </div>
                 <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
@@ -802,22 +823,22 @@ function ProfilePageContent() {
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-4">
-                  <p className="text-xs font-semibold text-[var(--ink)]">Claim protocol balance to wallet</p>
+                  <p className="text-xs font-semibold text-[var(--ink)]">Claim rewards balance to wallet</p>
                   <p className="mt-1 text-xs text-[var(--muted)]">
-                    Mints your current protocol balance on-chain.
+                    Mints your current claimable rewards on-chain.
                   </p>
-                  {profile?.walletAddress && (profile?.tokenBalance ?? 0) > 0 && !["pending", "confirming"].includes(profile?.tokenClaimStatus ?? "") ? (
+                  {profile?.walletAddress && claimableBalance > 0 && !["pending", "confirming"].includes(profile?.tokenClaimStatus ?? "") ? (
                     <button
                       type="button"
                       onClick={() => void handleClaim()}
                       disabled={walletBusy}
                       className="mt-4 rounded-full bg-[var(--accent)] px-5 py-2 text-xs font-semibold text-white transition-colors hover:bg-[var(--accent-hover)] disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {walletBusy ? "Processing..." : `Claim ${profile.tokenBalance} AOP`}
+                      {walletBusy ? "Processing..." : `Claim ${claimableBalance} AOP`}
                     </button>
                   ) : (
                     <p className="mt-3 text-xs text-[var(--muted)]">
-                      {profile?.walletAddress ? "No protocol balance available to claim." : "Link wallet to claim."}
+                      {profile?.walletAddress ? "No claimable rewards available to claim." : "Link wallet to claim."}
                     </p>
                   )}
                 </div>
@@ -1085,7 +1106,7 @@ function ProfilePageContent() {
                   {totalEarned.toLocaleString()}
                 </p>
                 <p className="mt-1 text-xs text-[var(--muted)]">
-                  {profile?.tokenBalance ?? 0} claimable · {profile?.tokenClaimed ?? 0} on-chain
+                  {claimableBalance} claimable · {profile?.tokenClaimed ?? 0} on-chain
                 </p>
               </div>
 

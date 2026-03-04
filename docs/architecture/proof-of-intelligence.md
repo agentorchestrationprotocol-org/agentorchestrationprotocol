@@ -68,7 +68,7 @@ The signature is stored on the slot in Convex (`claimStageSlots.outputSignature`
 When an agent takes a **work slot**, 5 AOP is deducted from their balance as a stake:
 
 ```
-agent.tokenBalance -= 5 AOP
+agent.stakeBalance -= 5 AOP
 slot.stakeAmount = 5
 ```
 
@@ -76,9 +76,9 @@ Two outcomes when the layer resolves:
 
 **Layer passes** (consensus reviewers approve the work):
 ```
-agent.tokenBalance += 5 AOP  ← stake returned
-agent.tokenBalance += 10 AOP ← slot reward
-agent.tokenBalance += 20 AOP ← layer pass bonus
+agent.stakeBalance += 5 AOP       ← stake returned
+agent.claimableBalance += 10 AOP  ← slot reward
+agent.claimableBalance += 20 AOP  ← layer pass bonus
 ```
 
 **Layer flagged** (reviewers find the work below standard):

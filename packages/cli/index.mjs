@@ -511,7 +511,10 @@ async function runBalanceCommand({ flags }) {
   }
 
   const balance = await res.json();
-  const tokenBalance = Number(balance.tokenBalance ?? 0);
+  const stakeBalance = Number(
+    balance.stakeBalance ?? balance.tokenBalance ?? 0
+  );
+  const claimableBalance = Number(balance.claimableBalance ?? 0);
   const tokenClaimed = Number(balance.tokenClaimed ?? 0);
   const walletOnChainBalance =
     balance.walletOnChainBalance === null || balance.walletOnChainBalance === undefined
@@ -521,14 +524,15 @@ async function runBalanceCommand({ flags }) {
   const hasEnoughStake =
     typeof balance.hasEnoughStake === "boolean"
       ? balance.hasEnoughStake
-      : tokenBalance >= stakeRequired;
+      : stakeBalance >= stakeRequired;
 
   console.log("");
   console.log(`  ${c.bold}${c.cyan}AOP Balance${c.reset}`);
   console.log(`  ${c.dim}API base: ${apiBase}${c.reset}`);
   console.log(`  ${c.dim}Key: ${balance.keyPrefix ?? apiKey.split("_").slice(0, 2).join("_")}_...${c.reset}`);
   console.log("");
-  console.log(`  ${c.bold}Protocol stake balance:${c.reset} ${c.cyan}${tokenBalance}${c.reset} AOP`);
+  console.log(`  ${c.bold}Protocol stake balance:${c.reset} ${c.cyan}${stakeBalance}${c.reset} AOP`);
+  console.log(`  ${c.bold}Claimable rewards balance:${c.reset} ${claimableBalance} AOP`);
   console.log(`  ${c.bold}Required per work slot:${c.reset} ${stakeRequired} AOP`);
   console.log(`  ${c.bold}Work-slot eligible:${c.reset} ${hasEnoughStake ? `${c.green}yes${c.reset}` : `${c.yellow}no${c.reset}`}`);
   console.log(`  ${c.bold}Linked wallet:${c.reset} ${balance.walletAddress ?? "not linked"}`);

@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { action, internalMutation, internalQuery, internalAction, mutation, query } from "./_generated/server";
 import { api, internal } from "./_generated/api";
+import { ledgerBackfillPatch, resolveLedgers } from "./utils/balances";
 
 const DEFAULT_STAKE_TOPUP_SINK = "0x000000000000000000000000000000000000dEaD";
 
@@ -15,7 +16,7 @@ type TopupResult = {
   applied: boolean;
   txHash: string;
   amount: number;
-  tokenBalance: number;
+  stakeBalance: number;
   tokenClaimed: number;
 };
 
@@ -62,6 +63,7 @@ export const getMetadata = query({
 
     const displayName = user.alias ?? primaryKey?.agentName ?? "AOP Agent";
     const joinedDate = new Date(user.createdAt).toISOString().split("T")[0];
+    const ledgers = resolveLedgers(user);
 
     return {
       name: displayName,
@@ -72,7 +74,8 @@ export const getMetadata = query({
         { trait_type: "Alias", value: displayName },
         ...(primaryKey?.agentModel ? [{ trait_type: "Model", value: primaryKey.agentModel }] : []),
         { trait_type: "Slots Completed", value: slotsCompleted, display_type: "number" },
-        { trait_type: "Token Balance", value: user.tokenBalance ?? 0, display_type: "number" },
+        { trait_type: "Claimable Balance", value: ledgers.claimableBalance, display_type: "number" },
+        { trait_type: "Stake Balance", value: ledgers.stakeBalance, display_type: "number" },
         { trait_type: "Joined", value: joinedDate, display_type: "date" },
       ],
     };
@@ -166,13 +169,20 @@ export const claimTokens = mutation({
       .unique();
     if (!user) throw new Error("User not found");
     if (!user.walletAddress) throw new Error("No wallet linked — link a wallet first");
+    const backfill = ledgerBackfillPatch(user);
+    if (backfill) {
+      await ctx.db.patch(user._id, backfill);
+    }
+    const ledgers = resolveLedgers(user);
 
-    const balance = user.tokenBalance ?? 0;
+    const balance = ledgers.claimableBalance;
     if (balance <= 0) throw new Error("No tokens to claim");
     const MIN_CLAIM = 1000;
     if (balance < MIN_CLAIM) throw new Error(`Minimum claim is ${MIN_CLAIM} AOP. You have ${balance} AOP — keep earning and claim when you reach ${MIN_CLAIM}.`);
 
     await ctx.db.patch(user._id, {
+      claimableBalance: 0,
+      stakeBalance: ledgers.stakeBalance,
       tokenBalance: 0,
       tokenClaimed: (user.tokenClaimed ?? 0) + balance,
       tokenClaimStatus: "pending",
@@ -248,8 +258,15 @@ export const restoreTokenBalance = internalMutation({
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);
     if (!user) return;
+    const backfill = ledgerBackfillPatch(user);
+    if (backfill) {
+      await ctx.db.patch(args.userId, backfill);
+    }
+    const ledgers = resolveLedgers(user);
     await ctx.db.patch(args.userId, {
-      tokenBalance: (user.tokenBalance ?? 0) + args.amount,
+      claimableBalance: ledgers.claimableBalance + args.amount,
+      stakeBalance: ledgers.stakeBalance,
+      tokenBalance: 0,
       tokenClaimed: Math.max(0, (user.tokenClaimed ?? 0) - args.amount),
     });
   },
@@ -285,6 +302,11 @@ export const applyVerifiedTopup = internalMutation({
 
     const user = await ctx.db.get(args.userId);
     if (!user) throw new Error("User not found");
+    const backfill = ledgerBackfillPatch(user);
+    if (backfill) {
+      await ctx.db.patch(args.userId, backfill);
+    }
+    const ledgers = resolveLedgers(user);
 
     if (existing) {
       if (existing.userId !== args.userId) {
@@ -294,7 +316,7 @@ export const applyVerifiedTopup = internalMutation({
         applied: false,
         txHash: existing.txHash,
         amount: existing.amount,
-        tokenBalance: user.tokenBalance ?? 0,
+        stakeBalance: ledgers.stakeBalance,
         tokenClaimed: user.tokenClaimed ?? 0,
       };
     }
@@ -306,7 +328,7 @@ export const applyVerifiedTopup = internalMutation({
       );
     }
 
-    const nextBalance = (user.tokenBalance ?? 0) + args.amount;
+    const nextStakeBalance = ledgers.stakeBalance + args.amount;
     const nextClaimed = currentClaimed - args.amount;
 
     await ctx.db.insert("tokenTopups", {
@@ -324,7 +346,9 @@ export const applyVerifiedTopup = internalMutation({
     });
 
     await ctx.db.patch(args.userId, {
-      tokenBalance: nextBalance,
+      stakeBalance: nextStakeBalance,
+      claimableBalance: ledgers.claimableBalance,
+      tokenBalance: 0,
       tokenClaimed: nextClaimed,
     });
 
@@ -332,7 +356,7 @@ export const applyVerifiedTopup = internalMutation({
       applied: true,
       txHash: args.txHash,
       amount: args.amount,
-      tokenBalance: nextBalance,
+      stakeBalance: nextStakeBalance,
       tokenClaimed: nextClaimed,
     };
   },
@@ -365,11 +389,12 @@ export const topUpStakeFromWalletTransfer = action({
       if (existing.userId !== user._id) {
         throw new Error("Top-up transaction already used by another account");
       }
+      const ledgers = resolveLedgers(user);
       return {
         applied: false,
         txHash: existing.txHash,
         amount: existing.amount,
-        tokenBalance: user.tokenBalance ?? 0,
+        stakeBalance: ledgers.stakeBalance,
         tokenClaimed: user.tokenClaimed ?? 0,
       };
     }
@@ -481,12 +506,15 @@ export const getAgentCryptoProfile = query({
       .withIndex("authId", (q) => q.eq("authId", agent.ownerAuthId))
       .unique();
     if (!user) return null;
+    const ledgers = resolveLedgers(user);
 
     return {
       walletAddress: user.walletAddress,
       sbtTokenId: user.sbtTokenId,
       sbtMintedAt: user.sbtMintedAt,
-      tokenBalance: user.tokenBalance ?? 0,
+      claimableBalance: ledgers.claimableBalance,
+      stakeBalance: ledgers.stakeBalance,
+      tokenBalance: ledgers.stakeBalance, // back-compat alias
       tokenClaimed: user.tokenClaimed ?? 0,
       tokenClaimStatus: user.tokenClaimStatus ?? null,
       tokenTxHash: user.tokenTxHash ?? null,

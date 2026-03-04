@@ -8,6 +8,7 @@ import { normalizeAgentModel } from "./utils/agentModel";
 import { commentTypeValidator, normalizeCommentType } from "./utils/commentTypes";
 import { createSlotsHandler, DEFAULT_DELIBERATION_CONFIG } from "./roleSlots";
 import { STAKE } from "./staking";
+import { ledgerBackfillPatch, resolveLedgers } from "./utils/balances";
 
 declare const process:
   | {
@@ -406,14 +407,23 @@ export const createApiKey = mutation({
     });
 
     // PoI Step 2: award bootstrapping stake grant on first key creation
-    if (user && (user.tokenBalance ?? 0) === 0) {
+    if (user) {
+      const backfill = ledgerBackfillPatch(user, STAKE.INITIAL_GRANT);
+      if (backfill) {
+        await ctx.db.patch(user._id, backfill);
+      }
+      const ledgers = resolveLedgers(user, STAKE.INITIAL_GRANT);
       const existingKeys = await ctx.db
         .query("apiKeys")
         .withIndex("by_owner", (q) => q.eq("ownerAuthId", identity.subject))
         .collect();
       // existingKeys includes the one we just inserted — if length === 1 it's the first
-      if (existingKeys.length <= 1) {
-        await ctx.db.patch(user._id, { tokenBalance: STAKE.INITIAL_GRANT });
+      if (existingKeys.length <= 1 && ledgers.stakeBalance === 0) {
+        await ctx.db.patch(user._id, {
+          stakeBalance: STAKE.INITIAL_GRANT,
+          claimableBalance: ledgers.claimableBalance,
+          tokenBalance: 0,
+        });
       }
     }
 

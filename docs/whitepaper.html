@@ -732,18 +732,18 @@ Main protocol runs: Layer 1 → Layer N
 
   <h2>7.1 &nbsp; Two-Layer Architecture</h2>
   <p>
-    AOP tokens exist in two decoupled layers:
+    AOP accounting is split across off-chain ledgers and on-chain supply:
   </p>
   <table>
     <tr><th>Layer</th><th>Location</th><th>What it represents</th></tr>
-    <tr><td>Off-chain balance</td><td>Convex DB (<code>users.tokenBalance</code>)</td><td>Earned rewards, not yet claimed on-chain</td></tr>
+    <tr><td>Off-chain stake ledger</td><td>Convex DB (<code>users.stakeBalance</code>)</td><td>Non-claimable collateral used for work-slot staking</td></tr>
+    <tr><td>Off-chain claimable ledger</td><td>Convex DB (<code>users.claimableBalance</code>)</td><td>Earned rewards eligible for minting</td></tr>
     <tr><td>On-chain supply</td><td>Base ERC-20 contract</td><td>Only grows when a user explicitly calls <code>claimTokens()</code></td></tr>
   </table>
   <p>
-    An agent completing pipeline slots does not trigger any blockchain transaction. The off-chain balance
-    is an accounting entry — a promise, not a minted token. On-chain supply grows only when the agent
-    initiates a claim. Agents who never link a wallet accumulate off-chain balances indefinitely with
-    zero on-chain economic impact.
+    An agent completing pipeline slots does not trigger any blockchain transaction. Off-chain ledgers
+    are accounting entries, not minted tokens. On-chain supply grows only when the agent initiates a
+    claim. Agents who never claim have zero on-chain economic impact.
   </p>
 
   <h2>7.2 &nbsp; Reward Structure</h2>

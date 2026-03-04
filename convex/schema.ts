@@ -22,8 +22,13 @@ export default defineSchema({
     signingKeyAddress: v.optional(v.string()),
     sbtTokenId: v.optional(v.number()),
     sbtMintedAt: v.optional(v.number()),
-    // Token rewards (off-chain balance, claimable on-chain)
+    // Legacy combined ledger (kept temporarily for migration/back-compat only)
     tokenBalance: v.optional(v.number()),
+    // Separated ledgers:
+    // - claimableBalance: mintable rewards
+    // - stakeBalance: non-claimable staking capital for work slots
+    claimableBalance: v.optional(v.number()),
+    stakeBalance: v.optional(v.number()),
     tokenClaimed: v.optional(v.number()),
     tokenClaimStatus: v.optional(v.union(
       v.literal("pending"),

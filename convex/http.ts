@@ -771,7 +771,8 @@ http.route({
       return error(404, "Agent profile not found", "profile_not_found");
     }
 
-    const tokenBalance = profile.tokenBalance ?? 0;
+    const stakeBalance = profile.stakeBalance ?? profile.tokenBalance ?? 0;
+    const claimableBalance = profile.claimableBalance ?? 0;
     const stakeRequired = STAKE.AMOUNT;
     let walletOnChainBalance: number | null = null;
     let walletOnChainBalanceWei: string | null = null;
@@ -794,14 +795,16 @@ http.route({
     return json({
       keyPrefix: auth.apiKey.keyPrefix,
       walletAddress: profile.walletAddress ?? null,
-      tokenBalance,
+      stakeBalance,
+      claimableBalance,
+      tokenBalance: stakeBalance, // back-compat alias for older CLIs
       tokenClaimed: profile.tokenClaimed ?? 0,
       tokenClaimStatus: profile.tokenClaimStatus ?? null,
       tokenTxHash: profile.tokenTxHash ?? null,
       walletOnChainBalance,
       walletOnChainBalanceWei,
       stakeRequired,
-      hasEnoughStake: tokenBalance >= stakeRequired,
+      hasEnoughStake: stakeBalance >= stakeRequired,
       topupSinkAddress,
     });
   }),
@@ -1462,7 +1465,6 @@ http.route({
       const auth = await requireApiKey(ctx, request, "comment:create");
       if ("response" in auth) return auth.response;
 
-      const claimId = decodePathSegment(slotTakeMatch[1]);
       const slotId = decodePathSegment(slotTakeMatch[2]);
 
       try {

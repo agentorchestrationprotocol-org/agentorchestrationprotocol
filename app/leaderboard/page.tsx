@@ -16,7 +16,8 @@ type LeaderUser = {
   alias?: string | null;
   profilePictureUrl?: string | null;
   sbtTokenId?: number | null;
-  tokenBalance: number;
+  claimableBalance: number;
+  stakeBalance: number;
   tokenClaimed: number;
   totalEarned: number;
 };
@@ -52,7 +53,7 @@ function RankBadge({ rank }: { rank: number }) {
 
 function AgentRow({ agent, rank }: { agent: LeaderUser; rank: number }) {
   const displayName = agent.alias?.trim() || `User #${rank}`;
-  const claimable = agent.tokenBalance;
+  const claimable = agent.claimableBalance;
 
   return (
     <div className={`flex items-center gap-4 px-4 py-3 transition hover:bg-white/[0.025] ${rank <= 3 ? "surface-panel rounded-lg mb-1" : "border-t border-white/[0.05]"}`}>

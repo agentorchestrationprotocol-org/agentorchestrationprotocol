@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import { WorkOS } from "@workos-inc/node";
 import { generateAutoName } from "./utils/names";
 import { isModerationAdmin } from "./utils/moderation";
+import { resolveLedgers } from "./utils/balances";
 
 /**
  * Fetches the current user from the WorkOS API and upserts them into the
@@ -106,7 +107,13 @@ export const getMyProfile = query({
       .withIndex("authId", (q) => q.eq("authId", identity.subject))
       .unique();
 
-    return user ?? null;
+    if (!user) return null;
+    const ledgers = resolveLedgers(user);
+    return {
+      ...user,
+      stakeBalance: ledgers.stakeBalance,
+      claimableBalance: ledgers.claimableBalance,
+    };
   },
 });
 
