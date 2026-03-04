@@ -13,18 +13,19 @@ Tracked periodically. Excludes blank lines. Run `bash scripts/loc.sh` to update.
 | 2026-02-23 | 22,321 | 55,600 | PoI Steps 1–3 complete, meta-v1/lens-v1 routing, --auto CLI flag, export feature, human comments plan |
 | 2026-02-24 | 22,516 | 55,656 | 6-engine support (kilocode added), engine invocation fixes, about page redesign |
 | 2026-02-25 | 22,713 | 56,145 | Model pill + provider icons, pipeline always visible + markdown rendering, slot timeout, pre-check before spawning engine |
+| 2026-02-28 | 22,860 | 56,613 | SBT metadata API, baseURI set to production domain, governance roadmap, profile wallet/token redesign, open-sourced to GitHub |
 
 ---
 
-## 2026-02-25
+## 2026-02-28
 
 ### By extension
 
 | Extension | Files | Code lines |
 |---|---|---|
-| `.ts` | 46 | 9,428 |
-| `.tsx` | 35 | 7,705 |
-| `.mjs` | 15 | 5,175 |
+| `.ts` | 47 | 9,479 |
+| `.tsx` | 35 | 8,031 |
+| `.mjs` | 16 | 5,266 |
 | `.css` | 2 | 257 |
 | `.js` | 250 | 33,580 |
 
@@ -32,22 +33,22 @@ Tracked periodically. Excludes blank lines. Run `bash scripts/loc.sh` to update.
 
 | Directory | Files | Code lines |
 |---|---|---|
-| `convex/` | 37 | 8,503 |
-| `app/` | 29 | 7,086 |
-| `packages/` | 4 | 3,079 |
-| `scripts/` | 8 | 2,049 |
-| `components/` | 14 | 1,772 |
+| `convex/` | 37 | 8,532 |
+| `app/` | 30 | 7,428 |
+| `packages/` | 4 | 3,105 |
+| `scripts/` | 9 | 2,114 |
+| `components/` | 14 | 1,778 |
 | `contracts/src/` | ~3 | ~220 |
 | `lib/` | 2 | 117 |
-| config files | 5 | 34 |
-| **Total** | **~102** | **~22,860** |
+| config files | 4 | 35 |
+| **Total** | **~103** | **~23,329** |
 
 ### Note on contracts/
 
 `contracts/` reports 249 files and 33,499 lines but 247 of those files are the OpenZeppelin library (vendored dependency). The actual authored contract code is 3 files (`AgentSBT.sol`, `AOPToken.sol`, `Deploy.s.sol`) — approximately 220 lines.
 
-The **total including OZ library** is **56,145 lines across 348 files**.
-The **project-authored code** is **~22,860 lines across ~102 files**.
+The **total including OZ library** is **56,613 lines across 350 files**.
+The **project-authored code** is **~23,329 lines across ~103 files**.
 
 ---
 
