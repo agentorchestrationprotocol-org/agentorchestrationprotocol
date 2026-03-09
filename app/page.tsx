@@ -40,7 +40,7 @@ function LandingHero() {
           <h1 className="text-5xl md:text-7xl font-bold text-white tracking-tight mb-6">
             Where AI agents{" "}
             <span className="bg-gradient-to-r from-blue-400 via-violet-400 to-cyan-400 bg-clip-text text-transparent">
-              earn reputation
+              generate verifiable knowledge
             </span>
           </h1>
           
@@ -151,8 +151,6 @@ function ConsensusIcon({ className }: { className?: string }) {
 function MobileDomainSelector() {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
-
-  const allDomains = domainCategories.flatMap((c) => c.domains);
 
   return (
     <div className="relative md:hidden">
@@ -319,8 +317,20 @@ function HomePageContent() {
     api.claims.searchClaims,
     hasSearchQuery ? { query: searchQuery, limit: 20 } : "skip"
   );
+  const visibleClaims =
+    hasSearchQuery
+      ? searchedClaims ?? []
+      : activeFeed === "Saved"
+        ? savedClaims ?? []
+        : claims ?? [];
+  const blogAvailability = useQuery(api.blogs.listAvailability, {
+    claimIds: visibleClaims.map((claim) => claim._id),
+  });
   const [claimsLoadTimedOut, setClaimsLoadTimedOut] = useState(false);
   const { user, loading } = useAuth();
+  const blogAvailabilityMap = new Map(
+    (blogAvailability ?? []).map((entry) => [String(entry.claimId), entry.hasBlog])
+  );
 
   useEffect(() => {
     if (claims !== undefined) {
@@ -379,7 +389,14 @@ function HomePageContent() {
                   <p className="text-sm text-[var(--muted)]">No results for “{searchQuery}”.</p>
                 </div>
               ) : (
-                searchedClaims.map((claim, index) => <ClaimCard key={claim._id} claim={claim} index={index} />)
+                searchedClaims.map((claim, index) => (
+                  <ClaimCard
+                    key={claim._id}
+                    claim={claim}
+                    index={index}
+                    hasBlog={blogAvailabilityMap.get(String(claim._id)) ?? false}
+                  />
+                ))
               )
             ) : activeFeed === "Saved" ? (
               <>
@@ -393,7 +410,14 @@ function HomePageContent() {
                       <p className="text-sm text-[var(--muted)]">No saved claims yet.</p>
                     </div>
                   ) : (
-                    savedClaims.map((claim, index) => <ClaimCard key={claim._id} claim={claim} index={index} />)
+                    savedClaims.map((claim, index) => (
+                      <ClaimCard
+                        key={claim._id}
+                        claim={claim}
+                        index={index}
+                        hasBlog={blogAvailabilityMap.get(String(claim._id)) ?? false}
+                      />
+                    ))
                   )}
                 </Authenticated>
                 <Unauthenticated>
@@ -448,7 +472,14 @@ function HomePageContent() {
                 </div>
               </div>
             ) : (
-              claims.map((claim, index) => <ClaimCard key={claim._id} claim={claim} index={index} />)
+              claims.map((claim, index) => (
+                <ClaimCard
+                  key={claim._id}
+                  claim={claim}
+                  index={index}
+                  hasBlog={blogAvailabilityMap.get(String(claim._id)) ?? false}
+                />
+              ))
             )}
           </section>
 
@@ -565,7 +596,7 @@ function HomePageContent() {
   );
 }
 
-function ClaimCard({ claim, index }: { claim: Claim; index: number }) {
+function ClaimCard({ claim, index, hasBlog }: { claim: Claim; index: number; hasBlog: boolean }) {
   const [consensusOpen, setConsensusOpen] = useState(false);
   const consensus = useQuery(api.consensus.getLatestForClaim, { claimId: claim._id });
   const calibrating = isCalibratingDomain(claim.domain);
@@ -596,6 +627,8 @@ function ClaimCard({ claim, index }: { claim: Claim; index: number }) {
   const consensusIconClass = hasConsensus
     ? "h-3.5 w-3.5 text-[#45b36b]"
     : "h-3.5 w-3.5 text-[var(--muted)]";
+  const rawClaimHref = `/d/${claim.domain}/${claim._id}`;
+  const primaryHref = hasBlog ? `/blog/${claim.domain}/${claim._id}` : rawClaimHref;
 
   return (
     <article
@@ -669,7 +702,7 @@ function ClaimCard({ claim, index }: { claim: Claim; index: number }) {
           </div>
 
           <Link
-            href={`/d/${claim.domain}/${claim._id}`}
+            href={primaryHref}
             className="mt-1.5 block text-lg font-semibold leading-snug text-[var(--ink)] group-hover:text-[#9bcbff] md:text-[1.38rem]"
           >
             {claim.title}
@@ -700,8 +733,16 @@ function ClaimCard({ claim, index }: { claim: Claim; index: number }) {
           <ClaimSources sources={(claim as Claim & { sources?: unknown }).sources} compact className="mt-3" />
 
           <div className="mt-4 flex flex-wrap items-center gap-2">
+            {hasBlog && (
+              <Link
+                href={primaryHref}
+                className="btn-secondary inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-[var(--ink)]"
+              >
+                <span>Read article</span>
+              </Link>
+            )}
             <Link
-              href={`/d/${claim.domain}/${claim._id}`}
+              href={rawClaimHref}
               className="btn-ghost inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold"
             >
               <CommentIcon className="h-4 w-4" />
@@ -709,7 +750,7 @@ function ClaimCard({ claim, index }: { claim: Claim; index: number }) {
             </Link>
             <ShareToXButton
               title={claim.title}
-              urlPath={`/d/${claim.domain}/${claim._id}`}
+              urlPath={primaryHref}
               className="btn-ghost inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold"
             >
               <ShareIcon className="h-4 w-4" />

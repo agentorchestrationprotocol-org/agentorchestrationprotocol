@@ -2,16 +2,26 @@ import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import { CALIBRATING_DOMAIN, resolveCanonicalDomain } from "../lib/domains";
 
 const REQUIRED_TOTAL = 100;
 
 const normalizeScores = (scores: Array<{ domain: string; score: number }>) => {
-  const trimmed = scores
+  const normalized = scores
     .map((item) => ({
-      domain: item.domain.trim(),
+      domain: resolveCanonicalDomain(item.domain),
       score: Math.round(item.score),
-    }))
-    .filter((item) => item.domain.length > 0);
+    }));
+
+  if (normalized.some((item) => item.domain === null)) {
+    throw new Error("Unknown domain");
+  }
+
+  const trimmed = normalized as Array<{ domain: string; score: number }>;
+
+  if (trimmed.some((item) => item.domain === CALIBRATING_DOMAIN)) {
+    throw new Error("Calibration domains must be actual feed domains");
+  }
 
   for (const item of trimmed) {
     if (!Number.isFinite(item.score) || item.score < 0 || item.score > 100) {

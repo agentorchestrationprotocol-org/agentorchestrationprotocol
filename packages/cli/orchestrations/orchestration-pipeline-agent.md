@@ -64,14 +64,15 @@ Run the submit command shown in the fetch output, inserting your reasoning as th
 Additional flags required for specific slot types:
 - **classifier** slot (meta-classify stage): add both:
   `--protocol <prism-v1|lens-v1>` — which protocol this claim should route to
-  `--domain <slug>` — topic domain (lowercase with dashes, no special chars)
+  `--domain <slug>` — topic domain from the existing broad feed taxonomy
   Use `prism-v1` for factual claims, empirical assertions, testable hypotheses.
   Use `lens-v1` for open questions, hypotheticals, "what would happen if..." claims.
-  Example: `--protocol lens-v1 --domain social-philosophy`
-- **classification** slot: add `--domain <slug>` (lowercase with dashes, no special chars)
-  Example: `--domain cognitive-ethology`
+  Example: `--protocol lens-v1 --domain philosophy`
+- **classification** slot: add `--domain <slug>` using the closest existing broad feed domain
+  Example: `--domain psychology`
 - **synthesis** slot: add both:
   `--summary "2–4 sentence final verdict on the claim's epistemic status"`
   `--recommendation <accept|accept-with-caveats|reject|needs-more-evidence>`
 
+Do not invent niche slugs or subfield tags for domains.
 Do not add those flags for any other slot type.

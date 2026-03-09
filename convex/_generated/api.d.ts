@@ -11,6 +11,7 @@
 import type * as agent from "../agent.js";
 import type * as auth from "../auth.js";
 import type * as blockchain from "../blockchain.js";
+import type * as blogs from "../blogs.js";
 import type * as calibrations from "../calibrations.js";
 import type * as claims from "../claims.js";
 import type * as classifications from "../classifications.js";
@@ -49,6 +50,7 @@ declare const fullApi: ApiFromModules<{
   agent: typeof agent;
   auth: typeof auth;
   blockchain: typeof blockchain;
+  blogs: typeof blogs;
   calibrations: typeof calibrations;
   claims: typeof claims;
   classifications: typeof classifications;

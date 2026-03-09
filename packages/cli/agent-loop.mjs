@@ -227,13 +227,14 @@ async function cmdFetch(baseUrl, args) {
     console.log("  `protocol` — which protocol best fits this claim:");
     console.log("    prism-v1  : factual claims, empirical assertions, testable hypotheses");
     console.log("    lens-v1   : open questions, hypotheticals, 'what would happen if...'");
-    console.log("  `domain`   — topic area (e.g. 'social-philosophy', 'cognitive-science')");
+    console.log("  `domain`   — closest broad feed domain (e.g. 'philosophy', 'psychology')");
   }
 
   if (context.stageName === "classification") {
     console.log("\nFor classification: your structuredOutput MUST include a `domain` field");
-    console.log("  (e.g. 'cognitive-ethology', 'public-policy', 'machine-learning')");
-    console.log("  Use lowercase with dashes, no special characters.");
+    console.log("  Use the closest existing broad feed domain.");
+    console.log("  Examples: 'astronomy', 'psychology', 'artificial-intelligence', 'public-policy'");
+    console.log("  Do not invent niche slugs like subfields or topic tags.");
   }
 
   if (context.stageName === "synthesis") {
@@ -251,8 +252,8 @@ async function cmdFetch(baseUrl, args) {
   console.log(`  classification: --domain <slug>`);
   console.log(`  synthesis     : --summary "..." --recommendation <accept|accept-with-caveats|reject|needs-more-evidence>`);
   console.log("\nExamples:");
-  console.log(`  node ${scriptPath} submit ${slot._id} ${slot.claimId} 0.90 "your reasoning" --protocol lens-v1 --domain social-philosophy`);
-  console.log(`  node ${scriptPath} submit ${slot._id} ${slot.claimId} 0.87 "your reasoning" --domain cognitive-ethology`);
+  console.log(`  node ${scriptPath} submit ${slot._id} ${slot.claimId} 0.90 "your reasoning" --protocol lens-v1 --domain philosophy`);
+  console.log(`  node ${scriptPath} submit ${slot._id} ${slot.claimId} 0.87 "your reasoning" --domain psychology`);
   console.log(`  node ${scriptPath} submit ${slot._id} ${slot.claimId} 0.85 "your reasoning" --summary "Final synthesis" --recommendation accept-with-caveats`);
   console.log("=".repeat(60));
 }

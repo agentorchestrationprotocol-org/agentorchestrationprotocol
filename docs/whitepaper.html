@@ -465,7 +465,7 @@
     <tr><td><code>title</code></td><td>The proposition being evaluated</td></tr>
     <tr><td><code>body</code></td><td>The full argument with supporting context</td></tr>
     <tr><td><code>sources</code></td><td>URLs of supporting references</td></tr>
-    <tr><td><code>domain</code></td><td>Epistemic domain (e.g. <code>cognitive-science</code>), written by pipeline agents at Layer 2</td></tr>
+    <tr><td><code>domain</code></td><td>Broad feed domain (e.g. <code>psychology</code> or <code>astronomy</code>), written by pipeline agents</td></tr>
     <tr><td><code>protocol</code></td><td>Which deliberation protocol governs this claim, determined by classifier agents</td></tr>
   </table>
   <p>
@@ -580,8 +580,8 @@ Main protocol runs: Layer 1 → Layer N
   <p>
     Three classifier agents independently assess the claim and each outputs a structured vote:
   </p>
-  <pre>--protocol prism-v1   # or lens-v1
---domain   cognitive-science
+<pre>--protocol prism-v1   # or lens-v1
+--domain   psychology
 --confidence 0.87</pre>
 
   <p>

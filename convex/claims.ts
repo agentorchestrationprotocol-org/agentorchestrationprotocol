@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import type { QueryCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { generateAutoName } from "./utils/names";
 import { normalizeAvatarUrl } from "./utils/avatar";
@@ -10,10 +11,16 @@ import {
   normalizeModerationReasonCategory,
 } from "./utils/moderation";
 import { initPipelineHandler } from "./stageEngine";
+import {
+  CALIBRATING_DOMAIN,
+  GENERAL_DOMAIN,
+  canonicalizeClaimDomain,
+  resolveCanonicalDomain,
+  withCanonicalClaimDomain,
+} from "../lib/domains";
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 500;
-const CALIBRATING_DOMAIN = "calibrating";
 const MAX_SOURCES = 20;
 const DEFAULT_TRENDING_LIMIT = 5;
 const MAX_TRENDING_LIMIT = 20;
@@ -25,9 +32,53 @@ const SEARCH_CANDIDATE_LIMIT = 300;
 const DEFAULT_MODERATION_LIMIT = 100;
 const MAX_MODERATION_LIMIT = 200;
 const AGENT_DUPLICATE_CLAIM_WINDOW_MS = 30_000;
+const DOMAIN_BACKFILL_DEFAULT_LIMIT = 250;
+const DOMAIN_BACKFILL_MAX_LIMIT = 500;
 
 const filterVisibleClaims = <T extends { isHidden?: boolean }>(claims: T[]) =>
   claims.filter((claim) => !claim.isHidden);
+
+const canonicalizeClaim = <T extends Doc<"claims">>(claim: T): T =>
+  withCanonicalClaimDomain(claim);
+
+const dedupeClaims = <T extends { _id: string; createdAt: number }>(claims: T[]) => {
+  const unique = new Map<string, T>();
+  for (const claim of claims) {
+    unique.set(claim._id, claim);
+  }
+  return [...unique.values()].sort((a, b) => b.createdAt - a.createdAt);
+};
+
+const listClaimsByCanonicalDomain = async (
+  ctx: QueryCtx,
+  domain: string,
+  limit: number,
+  fetchLimit: number
+) => {
+  const direct = filterVisibleClaims(
+    await ctx.db
+      .query("claims")
+      .withIndex("by_domain", (q) => q.eq("domain", domain))
+      .order("desc")
+      .take(fetchLimit)
+  ).map(canonicalizeClaim);
+
+  if (direct.length >= limit) {
+    return direct.slice(0, limit);
+  }
+
+  const recent = filterVisibleClaims(
+    await ctx.db
+      .query("claims")
+      .withIndex("by_createdAt")
+      .order("desc")
+      .take(MAX_LIMIT)
+  )
+    .map(canonicalizeClaim)
+    .filter((claim) => claim.domain === domain);
+
+  return dedupeClaims([...direct, ...recent]).slice(0, limit);
+};
 
 const normalizeSources = (sources: Array<{ url: string; title?: string }> | undefined) => {
   if (!Array.isArray(sources) || sources.length === 0) {
@@ -81,19 +132,16 @@ export const listClaims = query({
     const limit = Math.min(args.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
     const fetchLimit = Math.min(MAX_LIMIT, Math.max(limit * 3, limit));
     if (args.domain) {
-      const rows = await ctx.db
-        .query("claims")
-        .withIndex("by_domain", (q) => q.eq("domain", args.domain!))
-        .order("desc")
-        .take(fetchLimit);
-      return filterVisibleClaims(rows).slice(0, limit);
+      const domain = resolveCanonicalDomain(args.domain);
+      if (!domain) return [];
+      return listClaimsByCanonicalDomain(ctx, domain, limit, fetchLimit);
     }
     const rows = await ctx.db
       .query("claims")
       .withIndex("by_createdAt")
       .order("desc")
       .take(fetchLimit);
-    return filterVisibleClaims(rows).slice(0, limit);
+    return filterVisibleClaims(rows).map(canonicalizeClaim).slice(0, limit);
   },
 });
 
@@ -109,7 +157,7 @@ export const getActiveDomains = query({
     const domains = new Set<string>();
     for (const claim of visible) {
       if (claim.domain && claim.domain !== CALIBRATING_DOMAIN) {
-        domains.add(claim.domain);
+        domains.add(canonicalizeClaimDomain(claim.domain));
       }
     }
     return Array.from(domains);
@@ -129,7 +177,7 @@ export const listClaimsByAuthor = query({
       .withIndex("by_author", (q) => q.eq("authorId", args.authorId))
       .order("desc")
       .take(fetchLimit);
-    return filterVisibleClaims(rows).slice(0, limit);
+    return filterVisibleClaims(rows).map(canonicalizeClaim).slice(0, limit);
   },
 });
 
@@ -157,7 +205,7 @@ export const listClaimsByAuthors = query({
     }
 
     results.sort((a, b) => b.createdAt - a.createdAt);
-    return filterVisibleClaims(results).slice(0, limit);
+    return filterVisibleClaims(results).map(canonicalizeClaim).slice(0, limit);
   },
 });
 
@@ -206,7 +254,7 @@ export const listTrendingClaims = query({
       })
       .slice(0, limit)
       .map(({ claim, trendingScore }) => ({
-        ...claim,
+        ...canonicalizeClaim(claim),
         trendingScore: Number(trendingScore.toFixed(3)),
       }));
 
@@ -245,7 +293,7 @@ export const searchClaims = query({
         const title = claim.title.toLowerCase();
         const body = claim.body.toLowerCase();
         const protocol = (claim.protocol ?? "").toLowerCase();
-        const domain = claim.domain.toLowerCase();
+        const domain = canonicalizeClaimDomain(claim.domain).toLowerCase();
         const haystack = `${title}\n${protocol}\n${domain}\n${body}`;
 
         if (!terms.every((term) => haystack.includes(term))) {
@@ -276,7 +324,7 @@ export const searchClaims = query({
         return b.claim.createdAt - a.claim.createdAt;
       })
       .slice(0, limit)
-      .map(({ claim }) => claim);
+      .map(({ claim }) => canonicalizeClaim(claim));
 
     return ranked;
   },
@@ -292,28 +340,26 @@ export const listClaimsForApiInternal = internalQuery({
     const limit = Math.min(args.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
     const fetchLimit = Math.min(MAX_LIMIT, Math.max(limit * 3, limit));
     const protocolId = args.protocolId?.trim();
+    const requestedDomain = args.domain ? resolveCanonicalDomain(args.domain) : null;
+
+    if (args.domain && !requestedDomain) {
+      return [];
+    }
 
     if (protocolId) {
-      const scopedClaims = args.domain
-        ? await ctx.db
-            .query("claims")
-            .withIndex("by_domain", (q) => q.eq("domain", args.domain!))
-            .order("desc")
-            .collect()
-        : await ctx.db.query("claims").withIndex("by_createdAt").order("desc").collect();
+      const scopedClaims = requestedDomain
+        ? await listClaimsByCanonicalDomain(ctx, requestedDomain, MAX_LIMIT, MAX_LIMIT)
+        : filterVisibleClaims(
+            await ctx.db.query("claims").withIndex("by_createdAt").order("desc").collect()
+          ).map(canonicalizeClaim);
 
-      return filterVisibleClaims(scopedClaims)
+      return scopedClaims
         .filter((claim) => (claim.protocol?.trim() ?? "") === protocolId)
         .slice(0, limit);
     }
 
-    if (args.domain) {
-      const rows = await ctx.db
-        .query("claims")
-        .withIndex("by_domain", (q) => q.eq("domain", args.domain!))
-        .order("desc")
-        .take(fetchLimit);
-      return filterVisibleClaims(rows).slice(0, limit);
+    if (requestedDomain) {
+      return listClaimsByCanonicalDomain(ctx, requestedDomain, limit, fetchLimit);
     }
 
     const rows = await ctx.db
@@ -321,7 +367,7 @@ export const listClaimsForApiInternal = internalQuery({
       .withIndex("by_createdAt")
       .order("desc")
       .take(fetchLimit);
-    return filterVisibleClaims(rows).slice(0, limit);
+    return filterVisibleClaims(rows).map(canonicalizeClaim).slice(0, limit);
   },
 });
 
@@ -375,7 +421,7 @@ export const getClaim = query({
   handler: async (ctx, args) => {
     const claim = await ctx.db.get(args.id);
     if (!claim || !claim.isHidden) {
-      return claim;
+      return claim ? canonicalizeClaim(claim) : claim;
     }
 
     const identity = await ctx.auth.getUserIdentity();
@@ -391,7 +437,7 @@ export const getClaim = query({
       return null;
     }
 
-    return claim;
+    return canonicalizeClaim(claim);
   },
 });
 
@@ -481,7 +527,10 @@ export const createClaimAsAgent = internalMutation({
     const title = args.title.trim();
     const body = args.body.trim();
     const protocol = args.protocol.trim();
-    const domain = args.domain?.trim() || CALIBRATING_DOMAIN;
+    const providedDomain = args.domain?.trim();
+    const domain = providedDomain
+      ? resolveCanonicalDomain(providedDomain) ?? GENERAL_DOMAIN
+      : CALIBRATING_DOMAIN;
     const sources = normalizeSources(args.sources);
     const agentModel = normalizeAgentModel(args.agentModel);
     const agentAvatarUrl = normalizeAvatarUrl(args.agentAvatarUrl);
@@ -592,6 +641,14 @@ export const deleteClaim = mutation({
       .collect();
     for (const calibration of calibrations) {
       await ctx.db.delete(calibration._id);
+    }
+
+    const outputs = await ctx.db
+      .query("claimOutputs")
+      .withIndex("by_claim", (q) => q.eq("claimId", args.id))
+      .collect();
+    for (const output of outputs) {
+      await ctx.db.delete(output._id);
     }
 
     // Pipeline cascade

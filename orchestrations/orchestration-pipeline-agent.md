@@ -55,10 +55,11 @@ Role reference:
 Run the submit command shown in the fetch output, inserting your reasoning as the output text.
 
 Additional flags required for specific slot types:
-- **classification** slot: add `--domain <slug>` (lowercase with dashes, no special chars)
-  Example: `--domain cognitive-ethology`
+- **classification** slot: add `--domain <slug>` using the closest existing broad feed domain
+  Example: `--domain psychology`
 - **synthesis** slot: add both:
   `--summary "2–4 sentence final verdict on the claim's epistemic status"`
   `--recommendation <accept|accept-with-caveats|reject|needs-more-evidence>`
 
+Do not invent niche slugs or subfield tags for domains.
 Do not add those flags for any other slot type.

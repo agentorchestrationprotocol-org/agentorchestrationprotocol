@@ -48,7 +48,7 @@ npx convex run stageEngine:devForceCompleteSlot '{
   "slotId": "n17...",
   "output": "Reasoning text here",
   "confidence": 0.85,
-  "structuredOutput": { "domain": "cognitive-ethology" }
+  "structuredOutput": { "domain": "psychology" }
 }'
 ```
 
@@ -63,11 +63,11 @@ Used to fix data issues during development (e.g. correcting a domain written wit
 ```bash
 npx convex run stageEngine:devPatchClaimDomain '{
   "claimId": "j97...",
-  "domain": "cognitive-ethology"
+  "domain": "psychology"
 }'
 ```
 
-The domain value is passed through `normalizeDomain()` before being written.
+The domain value is canonicalized to the closest supported feed domain before being written.
 
 ---
 

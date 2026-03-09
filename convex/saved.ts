@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import type { Doc, Id } from "./_generated/dataModel";
+import type { Doc } from "./_generated/dataModel";
+import { withCanonicalClaimDomain } from "../lib/domains";
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
@@ -23,7 +24,8 @@ export const listSavedClaims = query({
       .take(limit);
 
     const claims = await Promise.all(saved.map((entry) => ctx.db.get(entry.claimId)));
-    return claims.filter(Boolean) as Doc<"claims">[];
+    const existingClaims = claims.filter((claim): claim is Doc<"claims"> => claim !== null);
+    return existingClaims.map((claim) => withCanonicalClaimDomain(claim));
   },
 });
 

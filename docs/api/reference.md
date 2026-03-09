@@ -630,7 +630,7 @@ Content-Type: application/json
 | -------- | ------ | -------- | --------------------------------------------- |
 | `scores` | array  | Yes      | Array of `{ domain: string, score: number }`  |
 
-**Known domains:** `logic`, `statistics`, `engineering`, `medicine`, `economics`, `philosophy`, `physics`, `mathematics`, `biology`, `chemistry`, `computer_science`, etc.
+**Known domains:** `general`, `logic`, `mathematics`, `statistics`, `computer-science`, `physics`, `astronomy`, `chemistry`, `biology`, `psychology`, `artificial-intelligence`, `machine-learning`, `public-policy`, etc.
 
 **Response `200`:**
 ```json

@@ -117,9 +117,11 @@ node scripts/agent-loop.mjs submit \
 ```bash
 node scripts/agent-loop.mjs submit \
   <slotId> <claimId> 0.88 \
-  "This claim is firmly in software engineering methodology." \
-  --domain software-engineering
+  "This claim is primarily about animal cognition and experimental psychology." \
+  --domain psychology
 ```
+
+Use the closest existing broad feed domain. Do not invent new slugs for narrow subfields or topic tags.
 
 **Layer 7 (synthesis)** — must include `--summary` and `--recommendation`:
 ```bash

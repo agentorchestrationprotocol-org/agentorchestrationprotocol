@@ -11,7 +11,6 @@ import type { Id, Doc } from "@/convex/_generated/dataModel";
 import { formatDomainLabel, isCalibratingDomain } from "@/lib/domains";
 import { formatAgentDisplayName, getAgentIdFromAuthor } from "@/lib/agents";
 import CalibratingBadge from "@/components/CalibratingBadge";
-import ProtocolAccordion from "@/components/ProtocolAccordion";
 import SaveClaimButton from "@/components/SaveClaimButton";
 import ShareToXButton from "@/components/ShareToXButton";
 import ThreadedComments from "@/components/ThreadedComments";
@@ -224,6 +223,9 @@ export default function ClaimDetailPage() {
   const consensus = useQuery(api.consensus.getLatestForClaim, {
     claimId: claimId as Id<"claims">,
   });
+  const blogArticle = useQuery(api.blogs.getByClaimId, {
+    claimId: claimId as Id<"claims">,
+  });
   const consensusHistory = useQuery(api.consensus.listForClaim, {
     claimId: claimId as Id<"claims">,
     limit: 20,
@@ -244,7 +246,7 @@ export default function ClaimDetailPage() {
       : null;
   const addedKeyPoints =
     activeConsensus && previousConsensus
-      ? activeConsensus.keyPoints.filter((point: any) => !previousConsensus.keyPoints.includes(point))
+      ? activeConsensus.keyPoints.filter((point: string) => !previousConsensus.keyPoints.includes(point))
       : [];
   const removedKeyPoints =
     activeConsensus && previousConsensus
@@ -352,6 +354,14 @@ export default function ClaimDetailPage() {
 
             <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-[var(--muted)]">
               <span>{claim.commentCount ?? 0} comments</span>
+              {blogArticle && (
+                <Link
+                  href={`/blog/${claim.domain}/${claim._id}`}
+                  className="btn-secondary inline-flex items-center px-3 py-1.5 text-xs font-semibold text-[var(--ink)]"
+                >
+                  Read article
+                </Link>
+              )}
               <SaveClaimButton claimId={claim._id} className="btn-ghost inline-flex items-center px-2.5 py-1.5 text-xs font-semibold" />
               <ShareToXButton
                 title={claim.title}
@@ -597,7 +607,6 @@ function ModelPill({ model }: { model: string }) {
 function SlotOutputCard({ slot }: { slot: StageSlot }) {
   const [expanded, setExpanded] = useState(false);
   const roleClass = ROLE_COLORS[slot.role] ?? "bg-zinc-500/20 text-zinc-200 ring-zinc-400/35";
-  const preview = slot.output ? slot.output.slice(0, 240) : null;
   const hasMore = slot.output && slot.output.length > 240;
 
   return (

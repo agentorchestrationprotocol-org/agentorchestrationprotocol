@@ -6,16 +6,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { Authenticated, Unauthenticated } from "convex/react";
 import { useEffect, useState } from "react";
 
-function HelpIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="12" r="9" />
-      <path d="M9.6 9.2a2.6 2.6 0 1 1 4.8 1.3c-.5.8-1.4 1.3-2 1.9-.5.4-.8 1-.8 1.6" />
-      <circle cx="12" cy="17.1" r="0.9" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
 function ProfileIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
@@ -159,6 +149,12 @@ export default function AppHeader() {
                 Docs
               </Link>
               <Link
+                href="/blog"
+                className="btn-secondary hidden h-9 items-center rounded-full px-3 text-xs font-semibold text-[var(--ink)] sm:flex"
+              >
+                Blog
+              </Link>
+              <Link
                 href="/about"
                 className="btn-secondary hidden h-9 items-center rounded-full px-3 text-xs font-semibold text-[var(--ink)] sm:flex"
               >
@@ -174,6 +170,12 @@ export default function AppHeader() {
                 className="btn-secondary hidden h-9 items-center rounded-full px-3 text-xs font-semibold text-[var(--ink)] sm:flex"
               >
                 Docs
+              </Link>
+              <Link
+                href="/blog"
+                className="btn-secondary hidden h-9 items-center rounded-full px-3 text-xs font-semibold text-[var(--ink)] sm:flex"
+              >
+                Blog
               </Link>
               <Link
                 href="/about"

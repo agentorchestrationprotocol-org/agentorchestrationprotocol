@@ -15,17 +15,12 @@ import {
   releaseStakesHandler,
   slashStakesHandler,
 } from "./staking";
-
-const normalizeDomain = (raw: string) =>
-  raw
-    .toLowerCase()
-    .trim()
-    .normalize("NFD")                  // decompose accents: é → e + combining mark
-    .replace(/[\u0300-\u036f]/g, "")  // strip combining accent marks
-    .replace(/[^a-z0-9\s-]/g, "")    // remove anything not letter, digit, space, dash
-    .replace(/[\s_]+/g, "-")          // spaces/underscores → dash
-    .replace(/-+/g, "-")              // collapse multiple dashes
-    .replace(/^-|-$/g, "");           // trim leading/trailing dashes
+import {
+  GENERAL_DOMAIN,
+  canonicalizeClaimDomain,
+  resolveCanonicalDomain,
+  withCanonicalClaimDomain,
+} from "../lib/domains";
 
 // Keep this large enough so newer eligible slots are not hidden behind
 // older ineligible/open backlog when assigning work via /jobs/work.
@@ -106,8 +101,8 @@ const applyLayerEffect = async (
     const domainVotes = workSlots
       .map((s) => s.structuredOutput?.domain)
       .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
-      .map(normalizeDomain);
-    const winningDomain = majority(domainVotes) ?? "general";
+      .map((domain) => resolveCanonicalDomain(domain) ?? GENERAL_DOMAIN);
+    const winningDomain = majority(domainVotes) ?? GENERAL_DOMAIN;
 
     // Patch claim with domain and protocol
     await ctx.db.patch(claimId, {
@@ -174,7 +169,7 @@ const applyLayerEffect = async (
       ...workSlots.map((s) => s.structuredOutput?.domain),
     ]
       .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
-      .map(normalizeDomain);
+      .map((domain) => resolveCanonicalDomain(domain) ?? GENERAL_DOMAIN);
 
     const domain = majority(domainVotes);
     if (!domain) return;
@@ -183,7 +178,7 @@ const applyLayerEffect = async (
     if (!claim) return;
 
     // Only write if it's a real domain (not empty, not already set to this)
-    if (domain !== claim.domain) {
+    if (domain !== canonicalizeClaimDomain(claim.domain)) {
       await ctx.db.patch(claimId, { domain, updatedAt: Date.now() });
     }
     return;
@@ -447,6 +442,9 @@ export const checkAndAdvanceHandler = async (
       });
       // Proof of Intelligence — Step 1: commit output hash on-chain
       await ctx.scheduler.runAfter(0, internal.registryAction.commitPipelineHashAction, {
+        claimId: args.claimId,
+      });
+      await ctx.scheduler.runAfter(0, internal.blogs.generateForClaim, {
         claimId: args.claimId,
       });
       return;
@@ -742,7 +740,7 @@ export const findNextWorkSlot = internalQuery({
       if (!pipeline || pipeline.status !== "active") continue;
       if (pipeline.currentLayer !== slot.layer) continue;
 
-      const claim = await ctx.db.get(slot.claimId);
+      const claim = await ctx.db.get(slot.claimId) as Doc<"claims"> | null;
       if (!claim || (claim as any).isHidden) continue;
 
       const allSlots = await ctx.db
@@ -802,7 +800,7 @@ export const findNextWorkSlot = internalQuery({
 
       return {
         slot,
-        claim,
+        claim: withCanonicalClaimDomain(claim),
         context: {
           stageName: (stagesByLayer.get(slot.layer) as any)?.name ?? `layer-${slot.layer}`,
           priorLayers,
@@ -834,7 +832,9 @@ export const devPatchClaimDomain = internalMutation({
     if (process?.env?.DEV_MODE !== "true") {
       throw new Error("Dev mutations are disabled in production. Set DEV_MODE=true to enable.");
     }
-    await ctx.db.patch(args.claimId, { domain: normalizeDomain(args.domain) });
+    await ctx.db.patch(args.claimId, {
+      domain: resolveCanonicalDomain(args.domain) ?? GENERAL_DOMAIN,
+    });
     return { ok: true };
   },
 });

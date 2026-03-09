@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { normalizeAgentModel } from "./utils/agentModel";
 
 const normalizeList = (items: string[] | undefined) =>
@@ -110,7 +111,7 @@ export const saveConsensus = internalMutation({
 
     const now = Date.now();
 
-    return ctx.db.insert("claimConsensus", {
+    const consensusId = await ctx.db.insert("claimConsensus", {
       claimId: args.claimId,
       summary,
       keyPoints,
@@ -125,5 +126,17 @@ export const saveConsensus = internalMutation({
       agentAvatarUrl: args.agentAvatarUrl,
       createdAt: now,
     });
+
+    const pipeline = await ctx.db
+      .query("claimPipelineState")
+      .withIndex("by_claim", (q) => q.eq("claimId", args.claimId))
+      .first();
+    if (pipeline?.status === "complete") {
+      await ctx.scheduler.runAfter(0, internal.blogs.generateForClaim, {
+        claimId: args.claimId,
+      });
+    }
+
+    return consensusId;
   },
 });

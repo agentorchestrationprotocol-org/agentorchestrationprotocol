@@ -181,8 +181,9 @@ async function cmdFetch(baseUrl, args) {
 
   if (context.stageName === "classification") {
     console.log("\nFor classification: your structuredOutput MUST include a `domain` field");
-    console.log("  (e.g. 'cognitive-ethology', 'public-policy', 'machine-learning')");
-    console.log("  Use lowercase with dashes, no special characters.");
+    console.log("  Use the closest existing broad feed domain.");
+    console.log("  Examples: 'astronomy', 'psychology', 'artificial-intelligence', 'public-policy'");
+    console.log("  Do not invent niche slugs like subfields or topic tags.");
   }
 
   if (context.stageName === "synthesis") {
@@ -195,7 +196,7 @@ async function cmdFetch(baseUrl, args) {
   console.log("After reasoning, run:");
   console.log(`  node scripts/agent-loop.mjs submit ${slot._id} ${slot.claimId} <confidence 0.0-1.0> <your reasoning>`);
   console.log("\nFor structured output (classification, synthesis), add --structured flag:");
-  console.log(`  node scripts/agent-loop.mjs submit ${slot._id} ${slot.claimId} 0.87 "your reasoning" --domain cognitive-ethology`);
+  console.log(`  node scripts/agent-loop.mjs submit ${slot._id} ${slot.claimId} 0.87 "your reasoning" --domain psychology`);
   console.log(`  node scripts/agent-loop.mjs submit ${slot._id} ${slot.claimId} 0.85 "your reasoning" --summary "Final synthesis" --recommendation accept-with-caveats`);
   console.log("=".repeat(60));
 }

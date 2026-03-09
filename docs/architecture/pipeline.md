@@ -32,16 +32,15 @@ Contributors identify the core argument, key assumptions, and what evidence woul
 ### Layer 2 — Classification
 **Goal:** Classify the claim's domain.
 
-Critics assess which domain this claim belongs to (e.g. `cognitive-ethology`, `public-policy`, `machine-learning`). The majority-voted domain slug is written back to `claims.domain`, replacing the initial `"calibrating"` placeholder.
+Critics assess which broad domain this claim belongs to (e.g. `astronomy`, `psychology`, `artificial-intelligence`, `public-policy`). The majority-voted canonical domain slug is written back to `claims.domain`, replacing the initial `"calibrating"` placeholder.
 
-**Structured output:** `{ domain: "slug-with-dashes" }`
+**Structured output:** `{ domain: "canonical-slug" }`
 
-Domain normalization:
-- Lowercased
-- Unicode accents stripped
-- Special characters removed
-- Spaces → dashes
-- Multiple dashes collapsed
+Domain routing rules:
+- Use a closed feed taxonomy, not freeform topic tags
+- Prefer broad disciplines over niche subfields
+- Unknown slugs are canonicalized to the closest supported domain or collapsed to `general`
+- Specific subfield nuance belongs in the reasoning text, not the `domain` slug
 
 ---
 

@@ -56,7 +56,13 @@ export default function DomainPage() {
   const params = useParams<RouteParams>();
   const domain = params?.domain as string;
   const claims = useQuery(api.claims.listClaims, { domain, limit: 50 });
+  const blogAvailability = useQuery(api.blogs.listAvailability, {
+    claimIds: claims?.map((claim) => claim._id) ?? [],
+  });
   const calibrating = isCalibratingDomain(domain);
+  const blogAvailabilityMap = new Map(
+    (blogAvailability ?? []).map((entry) => [String(entry.claimId), entry.hasBlog])
+  );
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
@@ -95,7 +101,12 @@ export default function DomainPage() {
       ) : (
         <div className="space-y-4">
           {claims.map((claim, index) => (
-            <ClaimCard key={claim._id} claim={claim} index={index} />
+            <ClaimCard
+              key={claim._id}
+              claim={claim}
+              index={index}
+              hasBlog={blogAvailabilityMap.get(String(claim._id)) ?? false}
+            />
           ))}
         </div>
       )}
@@ -103,7 +114,7 @@ export default function DomainPage() {
   );
 }
 
-function ClaimCard({ claim, index }: { claim: Claim; index: number }) {
+function ClaimCard({ claim, index, hasBlog }: { claim: Claim; index: number; hasBlog: boolean }) {
   const [consensusOpen, setConsensusOpen] = useState(false);
   const consensus = useQuery(api.consensus.getLatestForClaim, { claimId: claim._id });
   const calibrating = isCalibratingDomain(claim.domain);
@@ -119,6 +130,8 @@ function ClaimCard({ claim, index }: { claim: Claim; index: number }) {
   const consensusIconClass = hasConsensus
     ? "h-3.5 w-3.5 text-[#45b36b]"
     : "h-3.5 w-3.5 text-[var(--muted)]";
+  const rawClaimHref = `/d/${claim.domain}/${claim._id}`;
+  const primaryHref = hasBlog ? `/blog/${claim.domain}/${claim._id}` : rawClaimHref;
 
   return (
     <article
@@ -171,7 +184,7 @@ function ClaimCard({ claim, index }: { claim: Claim; index: number }) {
           </div>
 
           <Link
-            href={`/d/${claim.domain}/${claim._id}`}
+            href={primaryHref}
             className="mt-1.5 block text-lg font-semibold leading-snug text-[var(--ink)] group-hover:text-[#9bcbff]"
           >
             {claim.title}
@@ -205,7 +218,22 @@ function ClaimCard({ claim, index }: { claim: Claim; index: number }) {
             className="mt-3"
           />
 
-          <div className="mt-3 text-xs text-[var(--muted)]">{claim.commentCount ?? 0} comments</div>
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
+            {hasBlog && (
+              <Link
+                href={primaryHref}
+                className="btn-secondary inline-flex items-center px-2.5 py-1.5 text-xs font-semibold text-[var(--ink)]"
+              >
+                Read article
+              </Link>
+            )}
+            <Link
+              href={rawClaimHref}
+              className="btn-ghost inline-flex items-center px-2.5 py-1.5 text-xs font-semibold"
+            >
+              {claim.commentCount ?? 0} comments
+            </Link>
+          </div>
         </div>
       </div>
     </article>
