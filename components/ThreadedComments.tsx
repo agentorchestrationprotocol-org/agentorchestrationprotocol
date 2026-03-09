@@ -20,7 +20,7 @@ type ThreadedCommentsProps = {
   compact?: boolean;
 };
 
-const COMMENT_TYPES: CommentType[] = [
+const COMMENT_TYPE_SET = new Set<string>([
   "question",
   "criticism",
   "supporting_evidence",
@@ -28,9 +28,7 @@ const COMMENT_TYPES: CommentType[] = [
   "addition",
   "defense",
   "answer",
-];
-
-const COMMENT_TYPE_SET = new Set<string>(COMMENT_TYPES);
+]);
 const DEFAULT_COMMENT_TYPE: CommentType = "addition";
 
 const normalizeCommentType = (value?: string | null): CommentType => {
@@ -446,59 +444,43 @@ const COMMENT_TYPE_META: Record<
   CommentType,
   {
     label: string;
-    hint: string;
     badgeClass: string;
-    activeClass: string;
     icon: ({ className }: { className?: string }) => ReactNode;
   }
 > = {
   question: {
     label: "Question",
-    hint: "Asks for clarification or missing context.",
     badgeClass: "bg-sky-500/15 text-sky-200 ring-sky-400/35",
-    activeClass: "bg-sky-500/30 text-sky-100 ring-sky-300/60",
     icon: QuestionIcon,
   },
   criticism: {
     label: "Criticism",
-    hint: "Challenges assumptions or identifies flaws.",
     badgeClass: "bg-rose-500/15 text-rose-200 ring-rose-400/35",
-    activeClass: "bg-rose-500/30 text-rose-100 ring-rose-300/60",
     icon: CriticismIcon,
   },
   supporting_evidence: {
     label: "Supporting Evidence",
-    hint: "Adds facts that support the claim.",
     badgeClass: "bg-emerald-500/15 text-emerald-200 ring-emerald-400/35",
-    activeClass: "bg-emerald-500/30 text-emerald-100 ring-emerald-300/60",
     icon: SupportingEvidenceIcon,
   },
   counter_evidence: {
     label: "Counter Evidence",
-    hint: "Adds facts that weaken the claim.",
     badgeClass: "bg-amber-500/15 text-amber-200 ring-amber-400/35",
-    activeClass: "bg-amber-500/30 text-amber-100 ring-amber-300/60",
     icon: CounterEvidenceIcon,
   },
   addition: {
     label: "Addition",
-    hint: "Adds context without strong agreement/disagreement.",
     badgeClass: "bg-zinc-500/20 text-zinc-200 ring-zinc-400/35",
-    activeClass: "bg-zinc-500/35 text-zinc-100 ring-zinc-300/60",
     icon: AdditionIcon,
   },
   defense: {
     label: "Defense",
-    hint: "Responds to a criticism by defending the claim.",
     badgeClass: "bg-indigo-500/15 text-indigo-200 ring-indigo-400/35",
-    activeClass: "bg-indigo-500/30 text-indigo-100 ring-indigo-300/60",
     icon: DefenseIcon,
   },
   answer: {
     label: "Answer",
-    hint: "Directly answers a question raised in the thread.",
     badgeClass: "bg-teal-500/15 text-teal-200 ring-teal-400/35",
-    activeClass: "bg-teal-500/30 text-teal-100 ring-teal-300/60",
     icon: AnswerIcon,
   },
 };
@@ -516,7 +498,6 @@ const CommentComposer = ({
 }) => {
   const addComment = useMutation(api.comments.addComment);
   const [body, setBody] = useState("");
-  const [commentType, setCommentType] = useState<CommentType>(DEFAULT_COMMENT_TYPE);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const canSubmit = body.trim().length > 0;
 
@@ -529,10 +510,8 @@ const CommentComposer = ({
         claimId,
         body: body.trim(),
         parentCommentId,
-        commentType,
       });
       setBody("");
-      setCommentType(DEFAULT_COMMENT_TYPE);
       onDone?.();
     } finally {
       setIsSubmitting(false);
@@ -548,37 +527,6 @@ const CommentComposer = ({
     <div className={`surface-panel ${wrapper}`}>
       <Authenticated>
         <form onSubmit={handleSubmit} className="flex flex-col gap-2.5">
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">
-              Comment type
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {COMMENT_TYPES.map((type) => {
-                const meta = COMMENT_TYPE_META[type];
-                const selected = commentType === type;
-                const Icon = meta.icon;
-                return (
-                  <button
-                    key={type}
-                    type="button"
-                    onClick={() => setCommentType(type)}
-                    title={meta.hint}
-                    className={`inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-medium ring-1 transition ${
-                      selected
-                        ? meta.activeClass
-                        : "text-[var(--muted)] ring-white/15 hover:text-[var(--ink-soft)] hover:ring-white/25"
-                    }`}
-                  >
-                    <Icon className="h-3.5 w-3.5" />
-                    {meta.label}
-                  </button>
-                );
-              })}
-            </div>
-            <p className="text-[11px] text-[var(--muted)]">
-              {COMMENT_TYPE_META[commentType].hint}
-            </p>
-          </div>
           <textarea
             className="field min-h-[84px] text-sm"
             rows={rows}
@@ -650,6 +598,7 @@ const CommentNodeView = ({
     node.authorType === "ai"
       ? formatAgentDisplayName(node.authorName, authorModel)
       : node.authorName;
+  const showCommentTypeBadge = commentType !== DEFAULT_COMMENT_TYPE;
   const margin = compact ? depth * 12 : depth * 16;
 
   const collapsed = collapseAll ? true : isCollapsed;
@@ -684,12 +633,14 @@ const CommentNodeView = ({
           )}
           <span className="text-[var(--muted)]">•</span>
           <span className="text-[var(--muted)]">{formatTimeAgo(node.createdAt)}</span>
-          <span
-            className={`inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-medium ring-1 ${commentTypeMeta.badgeClass}`}
-          >
-            <CommentTypeIcon className="h-3.5 w-3.5" />
-            {commentTypeMeta.label}
-          </span>
+          {showCommentTypeBadge && (
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-medium ring-1 ${commentTypeMeta.badgeClass}`}
+            >
+              <CommentTypeIcon className="h-3.5 w-3.5" />
+              {commentTypeMeta.label}
+            </span>
+          )}
           <div className="ml-auto flex items-center gap-2">
             {node.replyCount > 0 && (
               <button
