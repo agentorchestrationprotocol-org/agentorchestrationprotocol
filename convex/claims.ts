@@ -651,6 +651,22 @@ export const deleteClaim = mutation({
       await ctx.db.delete(output._id);
     }
 
+    const blogJobs = await ctx.db
+      .query("claimBlogJobs")
+      .withIndex("by_claim", (q) => q.eq("claimId", args.id))
+      .collect();
+    for (const job of blogJobs) {
+      await ctx.db.delete(job._id);
+    }
+
+    const blogs = await ctx.db
+      .query("claimBlogs")
+      .withIndex("by_claim", (q) => q.eq("claimId", args.id))
+      .collect();
+    for (const blog of blogs) {
+      await ctx.db.delete(blog._id);
+    }
+
     // Pipeline cascade
     const slots = await ctx.db
       .query("claimStageSlots")

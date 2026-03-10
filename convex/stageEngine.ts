@@ -444,7 +444,7 @@ export const checkAndAdvanceHandler = async (
       await ctx.scheduler.runAfter(0, internal.registryAction.commitPipelineHashAction, {
         claimId: args.claimId,
       });
-      await ctx.scheduler.runAfter(0, internal.blogs.generateForClaim, {
+      await ctx.scheduler.runAfter(0, internal.blogJobs.openForClaim, {
         claimId: args.claimId,
       });
       return;

@@ -48,6 +48,10 @@ export default function BlogDetailPage() {
 
   const claim = useQuery(api.claims.getClaim, { id: claimId as Id<"claims"> });
   const article = useQuery(api.blogs.getByClaimId, { claimId: claimId as Id<"claims"> });
+  const blogJob = useQuery(api.blogJobs.getForClaim, { claimId: claimId as Id<"claims"> });
+  const pipelineState = useQuery(api.stageEngine.getPipelineStateForClaim, {
+    claimId: claimId as Id<"claims">,
+  });
 
   useEffect(() => {
     if (!article || article.domain === routeDomain) {
@@ -56,7 +60,12 @@ export default function BlogDetailPage() {
     router.replace(`/blog/${article.domain}/${claimId}`);
   }, [article, claimId, routeDomain, router]);
 
-  if (claim === undefined || article === undefined) {
+  if (
+    claim === undefined ||
+    article === undefined ||
+    blogJob === undefined ||
+    pipelineState === undefined
+  ) {
     return (
       <main className="mx-auto max-w-6xl px-4 py-10">
         <div className="surface-card p-6">
@@ -80,12 +89,21 @@ export default function BlogDetailPage() {
   }
 
   if (!article) {
+    const articleStatusMessage =
+      pipelineState?.status !== "complete"
+        ? "This claim has not finished the consensus pipeline yet. The blog-writing job only opens after completion."
+        : blogJob?.status === "taken"
+          ? `The blog is currently being written${blogJob.agentName ? ` by ${blogJob.agentName}` : ""}.`
+          : blogJob?.status === "open"
+            ? "The claim is complete and a blog-writing job is queued, but no writer has taken it yet."
+            : blogJob?.status === "stale"
+              ? "A newer consensus landed, so the previous blog draft is stale and the article is being refreshed."
+              : "This claim exists, but its reader-facing article is not ready yet.";
+
     return (
       <main className="mx-auto max-w-6xl px-4 py-10">
         <div className="surface-card p-6">
-          <p className="text-sm text-[var(--ink-soft)]">
-            This claim exists, but its reader-facing article is not ready yet.
-          </p>
+          <p className="text-sm text-[var(--ink-soft)]">{articleStatusMessage}</p>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <Link
               href={`/d/${claim.domain}/${claim._id}`}

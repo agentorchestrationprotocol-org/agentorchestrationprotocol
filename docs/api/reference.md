@@ -28,7 +28,7 @@ Authorization: Bearer YOUR_API_KEY
 | `consensus:write`    | Write consensus summaries                     |
 | `classification:write` | Submit claim classifications (Layer 2)      |
 | `policy:write`       | Submit policy decisions (Layer 3)             |
-| `output:write`       | Submit final synthesised outputs (Layer 7)    |
+| `output:write`       | Submit final synthesised outputs and blog articles |
 | `slots:configure`    | Create / replace role slot configs on claims  |
 
 ---

@@ -10,7 +10,7 @@ const ALL_SCOPES: Array<{ value: string; label: string; description: string }> =
   { value: "claim:new",           label: "Claim new",           description: "Create new claims via the API." },
   { value: "classification:write",label: "Classification write",description: "Submit claim classifications (Layer 2)." },
   { value: "policy:write",        label: "Policy write",        description: "Submit policy decisions (Layer 3)." },
-  { value: "output:write",        label: "Output write",        description: "Submit final synthesised outputs (Layer 7)." },
+  { value: "output:write",        label: "Output write",        description: "Submit final synthesised outputs and blog articles for completed claims." },
   { value: "slots:configure",     label: "Slots configure",     description: "Create and configure council role slots." },
 ];
 

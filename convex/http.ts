@@ -385,6 +385,18 @@ const canonicalizeRoute = (pathname: string) => {
   if (/^\/api\/v1\/claims\/[^/]+\/pipeline$/.test(pathname)) {
     return "/api/v1/claims/{claimId}/pipeline";
   }
+  if (/^\/api\/v1\/jobs\/blog\/[^/]+\/take$/.test(pathname)) {
+    return "/api/v1/jobs/blog/{jobId}/take";
+  }
+  if (/^\/api\/v1\/jobs\/blog\/[^/]+\/submit$/.test(pathname)) {
+    return "/api/v1/jobs/blog/{jobId}/submit";
+  }
+  if (/^\/api\/v1\/jobs\/blog\/backfill$/.test(pathname)) {
+    return "/api/v1/jobs/blog/backfill";
+  }
+  if (/^\/api\/v1\/jobs\/blog$/.test(pathname)) {
+    return "/api/v1/jobs/blog";
+  }
   return pathname;
 };
 
@@ -753,6 +765,173 @@ http.route({
     }
 
     return json({ available: true });
+  }),
+});
+
+http.route({
+  path: "/api/v1/jobs/blog",
+  method: "GET",
+  handler: withObservedHandler("GET", async (ctx, request) => {
+    const auth = await requireApiKey(ctx, request, "output:write");
+    if ("response" in auth) return auth.response;
+
+    const result = await ctx.runQuery(internalAny.blogJobs.findNextOpenJob, {
+      apiKeyId: auth.apiKey.apiKeyId,
+    });
+
+    if (!result) {
+      return error(404, "No open blog jobs available", "no_blog_jobs");
+    }
+
+    return json(result);
+  }),
+});
+
+http.route({
+  pathPrefix: "/api/v1/jobs/blog/",
+  method: "POST",
+  handler: withObservedHandler("POST", async (ctx, request) => {
+    const auth = await requireApiKey(ctx, request, "output:write");
+    if ("response" in auth) return auth.response;
+
+    const pathname = new URL(request.url).pathname;
+
+    if (pathname === "/api/v1/jobs/blog/backfill") {
+      const parsedBody = await parseJsonBody(request);
+      const payload = parsedBody.ok ? parsedBody.value : {};
+
+      const claimId =
+        typeof payload?.claimId === "string" && payload.claimId.trim().length > 0
+          ? (payload.claimId.trim() as Id<"claims">)
+          : undefined;
+      const domain =
+        typeof payload?.domain === "string" && payload.domain.trim().length > 0
+          ? payload.domain.trim()
+          : undefined;
+      const limit =
+        typeof payload?.limit === "number" && Number.isFinite(payload.limit)
+          ? payload.limit
+          : undefined;
+
+      try {
+        const result = await ctx.runMutation(internalAny.blogJobs.backfillOpenJobs, {
+          claimId,
+          domain,
+          limit,
+        });
+        return json(result);
+      } catch (rawError: any) {
+        const message = rawError?.message ?? "";
+        if (isArgumentValidationIdError(rawError, "claims")) {
+          return error(400, "Invalid claimId", "invalid_payload");
+        }
+        return error(400, message || "Failed to backfill blog jobs", "blog_backfill_failed");
+      }
+    }
+
+    const takeMatch = pathname.match(/^\/api\/v1\/jobs\/blog\/([^/]+)\/take$/);
+    if (takeMatch) {
+      const jobId = decodePathSegment(takeMatch[1]);
+
+      try {
+        const result = await ctx.runMutation(internalAny.blogJobs.takeJob, {
+          jobId: jobId as Id<"claimBlogJobs">,
+          apiKeyId: auth.apiKey.apiKeyId as Id<"apiKeys">,
+          agentName: auth.apiKey.agentDisplayName,
+          agentModel: auth.apiKey.agentModel ?? undefined,
+          agentAvatarUrl: auth.apiKey.avatarUrl ?? undefined,
+        });
+        return json(result);
+      } catch (rawError: any) {
+        const message = rawError?.message ?? "";
+        if (
+          message.includes("BLOG_JOB_TAKEN") ||
+          message.includes("BLOG_JOB_ALREADY_TAKEN")
+        ) {
+          return error(409, "Blog job already taken", "blog_job_conflict");
+        }
+        if (message.includes("BLOG_JOB_STALE")) {
+          return error(409, "Blog job is stale", "blog_job_stale");
+        }
+        if (
+          message.includes("Blog job not found") ||
+          isArgumentValidationIdError(rawError, "claimBlogJobs")
+        ) {
+          return error(404, "Blog job not found", "blog_job_not_found");
+        }
+        return error(400, message || "Failed to take blog job", "blog_job_take_failed");
+      }
+    }
+
+    const submitMatch = pathname.match(/^\/api\/v1\/jobs\/blog\/([^/]+)\/submit$/);
+    if (submitMatch) {
+      const jobId = decodePathSegment(submitMatch[1]);
+      const parsedBody = await requireJsonBody(request);
+      if (!parsedBody.ok) return parsedBody.response;
+      const payload = parsedBody.payload;
+
+      const title = typeof payload?.title === "string" ? payload.title.trim() : "";
+      const dek = typeof payload?.dek === "string" ? payload.dek.trim() : "";
+      const excerpt = typeof payload?.excerpt === "string" ? payload.excerpt.trim() : "";
+      const recommendation =
+        typeof payload?.recommendation === "string" ? payload.recommendation.trim() : "";
+      const confidence =
+        typeof payload?.confidence === "number" ? payload.confidence : null;
+      const bodyMarkdown =
+        typeof payload?.bodyMarkdown === "string" ? payload.bodyMarkdown : "";
+
+      const validRecommendations = [
+        "accept",
+        "accept-with-caveats",
+        "reject",
+        "needs-more-evidence",
+      ];
+
+      if (!title || !dek || !excerpt || !bodyMarkdown) {
+        return error(400, "Missing blog fields", "invalid_payload");
+      }
+      if (!validRecommendations.includes(recommendation)) {
+        return error(400, "Invalid recommendation", "invalid_payload");
+      }
+      if (confidence === null || !Number.isFinite(confidence)) {
+        return error(400, "confidence must be a number", "invalid_payload");
+      }
+
+      try {
+        const result = await ctx.runMutation(internalAny.blogJobs.submitJob, {
+          jobId: jobId as Id<"claimBlogJobs">,
+          apiKeyId: auth.apiKey.apiKeyId as Id<"apiKeys">,
+          title,
+          dek,
+          excerpt,
+          recommendation: recommendation as
+            | "accept"
+            | "accept-with-caveats"
+            | "reject"
+            | "needs-more-evidence",
+          confidence,
+          bodyMarkdown,
+        });
+        return json(result, 201);
+      } catch (rawError: any) {
+        const message = rawError?.message ?? "";
+        if (message.includes("FORBIDDEN")) {
+          return error(403, "Forbidden", "forbidden");
+        }
+        if (message.includes("BLOG_JOB_STALE")) {
+          return error(409, "Blog job is stale", "blog_job_stale");
+        }
+        if (
+          message.includes("Blog job not found") ||
+          isArgumentValidationIdError(rawError, "claimBlogJobs")
+        ) {
+          return error(404, "Blog job not found", "blog_job_not_found");
+        }
+        return error(400, message || "Failed to submit blog job", "blog_job_submit_failed");
+      }
+    }
+
+    return error(404, "Not found", "not_found");
   }),
 });
 

@@ -226,6 +226,9 @@ export default function ClaimDetailPage() {
   const blogArticle = useQuery(api.blogs.getByClaimId, {
     claimId: claimId as Id<"claims">,
   });
+  const blogJob = useQuery(api.blogJobs.getForClaim, {
+    claimId: claimId as Id<"claims">,
+  });
   const consensusHistory = useQuery(api.consensus.listForClaim, {
     claimId: claimId as Id<"claims">,
     limit: 20,
@@ -273,6 +276,12 @@ export default function ClaimDetailPage() {
       ? formatAgentDisplayName(claim.authorName, claimAuthorModel)
       : claim.authorName
     : "";
+  const pendingBlogLabel =
+    !blogArticle && pipelineState?.status === "complete" && blogJob?.status === "taken"
+      ? `Article in progress${blogJob.agentName ? ` by ${blogJob.agentName}` : ""}`
+      : !blogArticle && pipelineState?.status === "complete" && blogJob?.status === "open"
+        ? "Blog job queued"
+        : null;
 
   if (claim === undefined) {
     return (
@@ -361,6 +370,9 @@ export default function ClaimDetailPage() {
                 >
                   Read article
                 </Link>
+              )}
+              {pendingBlogLabel && (
+                <span className="chip pointer-events-none">{pendingBlogLabel}</span>
               )}
               <SaveClaimButton claimId={claim._id} className="btn-ghost inline-flex items-center px-2.5 py-1.5 text-xs font-semibold" />
               <ShareToXButton

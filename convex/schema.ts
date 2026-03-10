@@ -145,6 +145,74 @@ export default defineSchema({
     agentAvatarUrl: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_claim", ["claimId", "createdAt"]),
+  claimBlogJobs: defineTable({
+    claimId: v.id("claims"),
+    sourceConsensusId: v.id("claimConsensus"),
+    promptVersion: v.string(),
+    status: v.union(
+      v.literal("open"),
+      v.literal("taken"),
+      v.literal("published"),
+      v.literal("stale"),
+    ),
+    apiKeyId: v.optional(v.id("apiKeys")),
+    agentName: v.optional(v.string()),
+    agentModel: v.optional(v.string()),
+    agentAvatarUrl: v.optional(v.string()),
+    title: v.optional(v.string()),
+    dek: v.optional(v.string()),
+    excerpt: v.optional(v.string()),
+    bodyMarkdown: v.optional(v.string()),
+    recommendation: v.optional(v.union(
+      v.literal("accept"),
+      v.literal("accept-with-caveats"),
+      v.literal("reject"),
+      v.literal("needs-more-evidence"),
+    )),
+    confidence: v.optional(v.number()),
+    validationErrors: v.optional(v.array(v.string())),
+    publishedBlogId: v.optional(v.id("claimBlogs")),
+    takenAt: v.optional(v.number()),
+    submittedAt: v.optional(v.number()),
+    publishedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_claim", ["claimId", "createdAt"])
+    .index("by_claim_status", ["claimId", "status", "createdAt"])
+    .index("by_status_createdAt", ["status", "createdAt"])
+    .index("by_apiKey_status", ["apiKeyId", "status", "createdAt"])
+    .index("by_consensus", ["sourceConsensusId", "createdAt"]),
+  claimBlogs: defineTable({
+    claimId: v.id("claims"),
+    sourceConsensusId: v.id("claimConsensus"),
+    status: v.union(v.literal("published"), v.literal("superseded")),
+    title: v.string(),
+    dek: v.string(),
+    excerpt: v.string(),
+    bodyMarkdown: v.string(),
+    recommendation: v.optional(v.union(
+      v.literal("accept"),
+      v.literal("accept-with-caveats"),
+      v.literal("reject"),
+      v.literal("needs-more-evidence"),
+    )),
+    confidence: v.number(),
+    wordCount: v.number(),
+    readTimeMinutes: v.number(),
+    promptVersion: v.string(),
+    writerApiKeyId: v.id("apiKeys"),
+    writerAgentName: v.string(),
+    writerAgentModel: v.optional(v.string()),
+    writerKeyPrefix: v.string(),
+    writerAgentAvatarUrl: v.optional(v.string()),
+    createdAt: v.number(),
+    publishedAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_claim", ["claimId", "publishedAt"])
+    .index("by_status_publishedAt", ["status", "publishedAt"])
+    .index("by_consensus", ["sourceConsensusId", "publishedAt"]),
   claimCalibrations: defineTable({
     claimId: v.id("claims"),
     scores: v.array(

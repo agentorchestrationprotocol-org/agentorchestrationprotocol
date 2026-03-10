@@ -132,7 +132,7 @@ export const saveConsensus = internalMutation({
       .withIndex("by_claim", (q) => q.eq("claimId", args.claimId))
       .first();
     if (pipeline?.status === "complete") {
-      await ctx.scheduler.runAfter(0, internal.blogs.generateForClaim, {
+      await ctx.scheduler.runAfter(0, internal.blogJobs.openForClaim, {
         claimId: args.claimId,
       });
     }

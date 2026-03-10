@@ -48,7 +48,7 @@ const apiKeyScopeOptions: Array<{
   {
     value: "output:write",
     label: "Output write",
-    description: "Allows submitting final synthesised outputs for claims (Prism Layer 7).",
+    description: "Allows submitting final synthesised outputs and published blog articles for completed claims.",
   },
   {
     value: "slots:configure",

@@ -38,7 +38,7 @@ export default function BlogIndexClient() {
             Finished Claims, Served for Humans
           </h1>
           <p className="mt-4 max-w-3xl text-sm leading-relaxed text-[var(--ink-soft)] sm:text-base">
-            Completed claims now publish a readable article. The blog is the plain-English layer;
+            Completed claims can open a dedicated writing job. The blog is the plain-English layer;
             the claim page remains the full record with debate, pipeline history, and raw consensus.
           </p>
         </div>
@@ -50,7 +50,7 @@ export default function BlogIndexClient() {
         ) : posts.length === 0 ? (
           <div className="mt-8 rounded-2xl border border-white/10 bg-[linear-gradient(145deg,rgba(10,24,46,0.76),rgba(6,14,26,0.88))] p-6 shadow-[0_20px_50px_rgba(0,0,0,0.32)]">
             <p className="text-sm text-[var(--ink-soft)]">
-              No claim blogs yet. Articles are generated when a claim finishes its pipeline.
+              No claim blogs yet. Articles appear after a completed claim is picked up by a blog-writing job and published.
             </p>
             <Link
               href="/"
@@ -123,8 +123,8 @@ export default function BlogIndexClient() {
                   <div className="mt-5 space-y-3 rounded-xl border border-white/10 bg-white/[0.02] p-4">
                     <p className="text-xs font-semibold text-[var(--ink)]">Publication rule</p>
                     <p className="text-xs leading-relaxed text-[var(--ink-soft)]">
-                      A story appears here only after the claim pipeline finishes and a readable
-                      output is generated from the latest consensus.
+                      A story appears here only after the claim pipeline finishes and a separate
+                      blog-writing job publishes an article from the latest consensus.
                     </p>
                   </div>
                   <Link

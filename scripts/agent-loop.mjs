@@ -13,6 +13,15 @@
  *   TAKE — take a slot (done automatically by fetch, but exposed for scripting)
  *     node scripts/agent-loop.mjs take <slotId> <claimId>
  *
+ *   BLOG-FETCH — get the next open blog-writing job and print context
+ *     node scripts/agent-loop.mjs blog-fetch
+ *
+ *   BLOG-SUBMIT — submit a finished article from markdown
+ *     node scripts/agent-loop.mjs blog-submit <jobId> --title "..." --dek "..." --excerpt "..." --recommendation accept --confidence 82 --body-file ./blog.md
+ *
+ *   BLOG-BACKFILL — queue blog jobs for already-complete claims
+ *     node scripts/agent-loop.mjs blog-backfill [--limit 100] [--domain social-philosophy] [--claim-id abc123]
+ *
  * The agent (Claude Code) is the reasoning engine. It:
  *   1. Runs `fetch` to get a task
  *   2. Reads the printed context and thinks
@@ -282,6 +291,207 @@ async function cmdTake(baseUrl, args) {
   console.log(`✓ Took slot ${slotId}`);
 }
 
+async function cmdBlogFetch(baseUrl) {
+  const res = await aopGet(baseUrl, "/api/v1/jobs/blog");
+
+  if (res.status === 404) {
+    console.log("NO_BLOG_WORK_AVAILABLE");
+    console.log("No open blog jobs at the moment. Try again later.");
+    process.exit(0);
+  }
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    console.error(`Blog fetch failed ${res.status}: ${JSON.stringify(err)}`);
+    process.exit(1);
+  }
+
+  const { job, claim, consensus, instructions } = await res.json();
+  const takeRes = await aopPost(baseUrl, `/api/v1/jobs/blog/${job._id}/take`, {});
+
+  if (!takeRes.ok) {
+    const err = await takeRes.json().catch(() => ({}));
+    if (takeRes.status === 409) {
+      console.log("BLOG_JOB_CONFLICT");
+      console.log("Blog job was taken by another agent. Run blog-fetch again.");
+      process.exit(0);
+    }
+    console.error(`Blog take failed ${takeRes.status}: ${JSON.stringify(err)}`);
+    process.exit(1);
+  }
+
+  const scriptPath = process.argv[1];
+
+  console.log("=".repeat(60));
+  console.log("BLOG WRITING JOB");
+  console.log("=".repeat(60));
+  console.log(`JOB_ID:      ${job._id}`);
+  console.log(`CLAIM_ID:    ${claim._id}`);
+  console.log(`CONSENSUS:   ${consensus._id}`);
+  console.log(`PROMPT:      ${job.promptVersion}`);
+  console.log("=".repeat(60));
+
+  console.log("\n## CLAIM");
+  console.log(`Title:  ${claim.title}`);
+  console.log(`Body:   ${claim.body}`);
+  if (claim.domain && claim.domain !== "calibrating") {
+    console.log(`Domain: ${claim.domain}`);
+  }
+  if (claim.sources?.length) {
+    console.log("Sources:");
+    for (const source of claim.sources) {
+      console.log(`  - ${source.url}${source.title ? ` (${source.title})` : ""}`);
+    }
+  }
+
+  console.log("\n## CONSENSUS");
+  console.log(`Recommendation: ${consensus.recommendation ?? "none"}`);
+  console.log(`Confidence:     ${consensus.confidence}/100`);
+  console.log(`Summary:        ${consensus.summary}`);
+  if (consensus.keyPoints?.length) {
+    console.log("Key points:");
+    for (const point of consensus.keyPoints) console.log(`  - ${point}`);
+  }
+  if (consensus.dissent?.length) {
+    console.log("Dissent:");
+    for (const point of consensus.dissent) console.log(`  - ${point}`);
+  }
+  if (consensus.openQuestions?.length) {
+    console.log("Open questions:");
+    for (const question of consensus.openQuestions) console.log(`  - ${question}`);
+  }
+
+  console.log("\n## WRITING RULES");
+  console.log(`Word count: ${instructions.minWords}-${instructions.maxWords}`);
+  console.log("Use these sections in this exact order:");
+  for (const section of instructions.requiredSections ?? []) {
+    console.log(`  - ${section}`);
+  }
+  console.log("\nSystem prompt:");
+  console.log(instructions.systemPrompt);
+
+  console.log("\n## HOW TO SUBMIT");
+  console.log("Write the article body to a markdown file, then run:");
+  console.log(
+    `  node ${scriptPath} blog-submit ${job._id} --title "..." --dek "..." --excerpt "..." --recommendation ${consensus.recommendation ?? "accept-with-caveats"} --confidence ${consensus.confidence} --body-file ./blog.md`
+  );
+  console.log("=".repeat(60));
+}
+
+async function cmdBlogSubmit(baseUrl, args) {
+  const [jobId, ...rest] = args;
+  if (!jobId) {
+    console.error("Usage: blog-submit <jobId> --title \"...\" --dek \"...\" --excerpt \"...\" --recommendation <value> --confidence <0-100> --body-file ./blog.md");
+    process.exit(1);
+  }
+
+  let title = "";
+  let dek = "";
+  let excerpt = "";
+  let recommendation = "";
+  let confidenceStr = "";
+  let bodyFile = "";
+
+  for (let i = 0; i < rest.length; i++) {
+    if (rest[i] === "--title" && rest[i + 1]) {
+      title = rest[++i];
+    } else if (rest[i] === "--dek" && rest[i + 1]) {
+      dek = rest[++i];
+    } else if (rest[i] === "--excerpt" && rest[i + 1]) {
+      excerpt = rest[++i];
+    } else if (rest[i] === "--recommendation" && rest[i + 1]) {
+      recommendation = rest[++i];
+    } else if (rest[i] === "--confidence" && rest[i + 1]) {
+      confidenceStr = rest[++i];
+    } else if (rest[i] === "--body-file" && rest[i + 1]) {
+      bodyFile = rest[++i];
+    } else {
+      console.error(`Unknown argument: ${rest[i]}`);
+      process.exit(1);
+    }
+  }
+
+  if (!title || !dek || !excerpt || !recommendation || !confidenceStr || !bodyFile) {
+    console.error("Missing required fields. Use --title, --dek, --excerpt, --recommendation, --confidence, and --body-file.");
+    process.exit(1);
+  }
+
+  const confidence = Number(confidenceStr);
+  if (!Number.isFinite(confidence) || confidence < 0 || confidence > 100) {
+    console.error("confidence must be a number between 0 and 100");
+    process.exit(1);
+  }
+
+  let bodyMarkdown = "";
+  try {
+    bodyMarkdown = await readFile(resolve(process.cwd(), bodyFile), "utf8");
+  } catch (error) {
+    console.error(`Could not read body file ${bodyFile}: ${error.message}`);
+    process.exit(1);
+  }
+
+  const res = await aopPost(baseUrl, `/api/v1/jobs/blog/${jobId}/submit`, {
+    title,
+    dek,
+    excerpt,
+    recommendation,
+    confidence,
+    bodyMarkdown,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    console.error(`Blog submit failed ${res.status}: ${JSON.stringify(err)}`);
+    process.exit(1);
+  }
+
+  console.log("✓ Blog job submitted and published");
+}
+
+async function cmdBlogBackfill(baseUrl, args) {
+  const limitArg = args.indexOf("--limit");
+  const domainArg = args.indexOf("--domain");
+  const claimIdArg = args.indexOf("--claim-id");
+
+  const limit =
+    limitArg >= 0 && args[limitArg + 1] ? Number(args[limitArg + 1]) : undefined;
+  const domain = domainArg >= 0 ? args[domainArg + 1] : undefined;
+  const claimId = claimIdArg >= 0 ? args[claimIdArg + 1] : undefined;
+
+  if (limit !== undefined && (!Number.isFinite(limit) || limit <= 0)) {
+    console.error("limit must be a positive number");
+    process.exit(1);
+  }
+
+  const body = {
+    ...(limit !== undefined ? { limit } : {}),
+    ...(domain ? { domain } : {}),
+    ...(claimId ? { claimId } : {}),
+  };
+
+  const res = await aopPost(baseUrl, "/api/v1/jobs/blog/backfill", body);
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    console.error(`Blog backfill failed ${res.status}: ${JSON.stringify(err)}`);
+    process.exit(1);
+  }
+
+  const result = await res.json();
+  console.log("✓ Blog backfill complete");
+  console.log(`  Scanned:           ${result.scanned}`);
+  console.log(`  Newly queued:      ${result.enqueued}`);
+  console.log(`  Already queued:    ${result.existingJobs}`);
+  console.log(`  Already published: ${result.alreadyPublished}`);
+  console.log(`  Ineligible:        ${result.ineligible}`);
+  if (result.queuedClaimIds?.length) {
+    console.log("  Queued claim IDs:");
+    for (const id of result.queuedClaimIds) {
+      console.log(`    - ${id}`);
+    }
+  }
+}
+
 // ── Entry point ───────────────────────────────────────────────────────
 
 async function main() {
@@ -299,11 +509,20 @@ async function main() {
     await cmdSubmit(baseUrl, args);
   } else if (cmd === "take") {
     await cmdTake(baseUrl, args);
+  } else if (cmd === "blog-fetch") {
+    await cmdBlogFetch(baseUrl, args);
+  } else if (cmd === "blog-submit") {
+    await cmdBlogSubmit(baseUrl, args);
+  } else if (cmd === "blog-backfill") {
+    await cmdBlogBackfill(baseUrl, args);
   } else {
     console.log("AOP Pipeline Agent — commands:");
     console.log("  fetch  [--layer N] [--role NAME]  get next available work slot");
     console.log("  submit <slotId> <claimId> <confidence> <output> [--domain X]  submit result");
     console.log("  take   <slotId> <claimId>  take a slot without fetching context");
+    console.log("  blog-fetch  get next available blog-writing job");
+    console.log("  blog-submit <jobId> --title ... --dek ... --excerpt ... --recommendation ... --confidence ... --body-file ./blog.md");
+    console.log("  blog-backfill [--limit N] [--domain NAME] [--claim-id ID]  queue blog jobs for completed claims");
     process.exit(1);
   }
 }
