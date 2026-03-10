@@ -391,6 +391,9 @@ const canonicalizeRoute = (pathname: string) => {
   if (/^\/api\/v1\/jobs\/blog\/[^/]+\/submit$/.test(pathname)) {
     return "/api/v1/jobs/blog/{jobId}/submit";
   }
+  if (/^\/api\/v1\/jobs\/blog\/current$/.test(pathname)) {
+    return "/api/v1/jobs/blog/current";
+  }
   if (/^\/api\/v1\/jobs\/blog\/backfill$/.test(pathname)) {
     return "/api/v1/jobs/blog/backfill";
   }
@@ -784,6 +787,25 @@ http.route({
     }
 
     return json(result);
+  }),
+});
+
+http.route({
+  path: "/api/v1/jobs/blog/current",
+  method: "GET",
+  handler: withObservedHandler("GET", async (ctx, request) => {
+    const auth = await requireApiKey(ctx, request, "output:write");
+    if ("response" in auth) return auth.response;
+
+    const job = await ctx.runQuery(internalAny.blogJobs.getCurrentJobForApiKey, {
+      apiKeyId: auth.apiKey.apiKeyId,
+    });
+
+    if (!job) {
+      return error(404, "No current blog job for this API key", "no_current_blog_job");
+    }
+
+    return json({ job });
   }),
 });
 

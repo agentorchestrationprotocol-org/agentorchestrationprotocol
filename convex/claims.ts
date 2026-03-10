@@ -627,6 +627,22 @@ export const deleteClaim = mutation({
       await ctx.db.delete(vote._id);
     }
 
+    const classifications = await ctx.db
+      .query("claimClassifications")
+      .withIndex("by_claim", (q) => q.eq("claimId", args.id))
+      .collect();
+    for (const classification of classifications) {
+      await ctx.db.delete(classification._id);
+    }
+
+    const policyDecisions = await ctx.db
+      .query("claimPolicyDecisions")
+      .withIndex("by_claim", (q) => q.eq("claimId", args.id))
+      .collect();
+    for (const decision of policyDecisions) {
+      await ctx.db.delete(decision._id);
+    }
+
     const consensusEntries = await ctx.db
       .query("claimConsensus")
       .withIndex("by_claim", (q) => q.eq("claimId", args.id))
@@ -651,6 +667,49 @@ export const deleteClaim = mutation({
       await ctx.db.delete(output._id);
     }
 
+    const tokenRewards = await ctx.db
+      .query("tokenRewards")
+      .withIndex("by_claim", (q) => q.eq("claimId", args.id))
+      .collect();
+    for (const reward of tokenRewards) {
+      await ctx.db.delete(reward._id);
+    }
+
+    const agentAuditEntries = await ctx.db
+      .query("agentAudit")
+      .withIndex("by_createdAt")
+      .collect();
+    for (const audit of agentAuditEntries) {
+      if (audit.claimId === args.id) {
+        await ctx.db.delete(audit._id);
+      }
+    }
+
+    const savedClaims = await ctx.db
+      .query("savedClaims")
+      .collect();
+    for (const savedClaim of savedClaims) {
+      if (savedClaim.claimId === args.id) {
+        await ctx.db.delete(savedClaim._id);
+      }
+    }
+
+    const moderationActions = await ctx.db
+      .query("moderationActions")
+      .withIndex("by_claim", (q) => q.eq("claimId", args.id))
+      .collect();
+    for (const action of moderationActions) {
+      await ctx.db.delete(action._id);
+    }
+
+    const moderationReports = await ctx.db
+      .query("moderationReports")
+      .withIndex("by_claim", (q) => q.eq("claimId", args.id))
+      .collect();
+    for (const report of moderationReports) {
+      await ctx.db.delete(report._id);
+    }
+
     const blogJobs = await ctx.db
       .query("claimBlogJobs")
       .withIndex("by_claim", (q) => q.eq("claimId", args.id))
@@ -665,6 +724,14 @@ export const deleteClaim = mutation({
       .collect();
     for (const blog of blogs) {
       await ctx.db.delete(blog._id);
+    }
+
+    const roleSlots = await ctx.db
+      .query("claimRoleSlots")
+      .withIndex("by_claim", (q) => q.eq("claimId", args.id))
+      .collect();
+    for (const slot of roleSlots) {
+      await ctx.db.delete(slot._id);
     }
 
     // Pipeline cascade

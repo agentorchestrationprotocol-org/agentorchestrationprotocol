@@ -155,7 +155,7 @@ test(
   }
 );
 
-test("deleteClaim mutation cascades comments, votes, consensus, and calibrations", async () => {
+test("deleteClaim mutation cascades all claim-linked records before removing the claim", async () => {
   const claimsSource = await file("convex/claims.ts");
   const deleteClaimSection = sectionUntilNextExport(
     claimsSource,
@@ -167,21 +167,63 @@ test("deleteClaim mutation cascades comments, votes, consensus, and calibrations
   assert.match(deleteClaimSection, /\.query\("commentVotes"\)/);
   assert.match(deleteClaimSection, /\.withIndex\("by_comment"/);
   assert.match(deleteClaimSection, /\.query\("claimVotes"\)/);
+  assert.match(deleteClaimSection, /\.query\("claimClassifications"\)/);
+  assert.match(deleteClaimSection, /\.query\("claimPolicyDecisions"\)/);
   assert.match(deleteClaimSection, /\.query\("claimConsensus"\)/);
   assert.match(deleteClaimSection, /\.query\("claimCalibrations"\)/);
+  assert.match(deleteClaimSection, /\.query\("claimOutputs"\)/);
+  assert.match(deleteClaimSection, /\.query\("tokenRewards"\)/);
+  assert.match(deleteClaimSection, /\.query\("agentAudit"\)/);
+  assert.match(deleteClaimSection, /\.query\("savedClaims"\)/);
+  assert.match(deleteClaimSection, /\.query\("moderationReports"\)/);
+  assert.match(deleteClaimSection, /\.query\("moderationActions"\)/);
+  assert.match(deleteClaimSection, /\.query\("claimBlogJobs"\)/);
+  assert.match(deleteClaimSection, /\.query\("claimBlogs"\)/);
+  assert.match(deleteClaimSection, /\.query\("claimRoleSlots"\)/);
+  assert.match(deleteClaimSection, /\.query\("claimStageSlots"\)/);
+  assert.match(deleteClaimSection, /\.query\("claimPipelineState"\)/);
+  assert.match(deleteClaimSection, /\.query\("claimFlags"\)/);
   assert.match(deleteClaimSection, /await ctx\.db\.delete\(args\.id\)/);
 
   const commentVotesPos = deleteClaimSection.indexOf('.query("commentVotes")');
   const commentsPos = deleteClaimSection.indexOf("await ctx.db.delete(comment._id)");
   const claimVotesPos = deleteClaimSection.indexOf('.query("claimVotes")');
+  const classificationsPos = deleteClaimSection.indexOf('.query("claimClassifications")');
+  const policyDecisionsPos = deleteClaimSection.indexOf('.query("claimPolicyDecisions")');
   const consensusPos = deleteClaimSection.indexOf('.query("claimConsensus")');
   const calibrationsPos = deleteClaimSection.indexOf('.query("claimCalibrations")');
+  const outputsPos = deleteClaimSection.indexOf('.query("claimOutputs")');
+  const rewardsPos = deleteClaimSection.indexOf('.query("tokenRewards")');
+  const auditPos = deleteClaimSection.indexOf('.query("agentAudit")');
+  const savedClaimsPos = deleteClaimSection.indexOf('.query("savedClaims")');
+  const moderationActionsPos = deleteClaimSection.indexOf('.query("moderationActions")');
+  const moderationReportsPos = deleteClaimSection.indexOf('.query("moderationReports")');
+  const blogJobsPos = deleteClaimSection.indexOf('.query("claimBlogJobs")');
+  const blogsPos = deleteClaimSection.indexOf('.query("claimBlogs")');
+  const roleSlotsPos = deleteClaimSection.indexOf('.query("claimRoleSlots")');
+  const stageSlotsPos = deleteClaimSection.indexOf('.query("claimStageSlots")');
+  const pipelineStatePos = deleteClaimSection.indexOf('.query("claimPipelineState")');
+  const flagsPos = deleteClaimSection.indexOf('.query("claimFlags")');
   const claimDeletePos = deleteClaimSection.indexOf("await ctx.db.delete(args.id)");
 
   assert.ok(commentVotesPos !== -1 && commentsPos !== -1 && commentVotesPos < commentsPos);
   assert.ok(claimVotesPos !== -1 && claimVotesPos < claimDeletePos);
+  assert.ok(classificationsPos !== -1 && classificationsPos < claimDeletePos);
+  assert.ok(policyDecisionsPos !== -1 && policyDecisionsPos < claimDeletePos);
   assert.ok(consensusPos !== -1 && consensusPos < claimDeletePos);
   assert.ok(calibrationsPos !== -1 && calibrationsPos < claimDeletePos);
+  assert.ok(outputsPos !== -1 && outputsPos < claimDeletePos);
+  assert.ok(rewardsPos !== -1 && rewardsPos < claimDeletePos);
+  assert.ok(auditPos !== -1 && auditPos < claimDeletePos);
+  assert.ok(savedClaimsPos !== -1 && savedClaimsPos < claimDeletePos);
+  assert.ok(moderationActionsPos !== -1 && moderationActionsPos < claimDeletePos);
+  assert.ok(moderationReportsPos !== -1 && moderationReportsPos < claimDeletePos);
+  assert.ok(blogJobsPos !== -1 && blogJobsPos < claimDeletePos);
+  assert.ok(blogsPos !== -1 && blogsPos < claimDeletePos);
+  assert.ok(roleSlotsPos !== -1 && roleSlotsPos < claimDeletePos);
+  assert.ok(stageSlotsPos !== -1 && stageSlotsPos < claimDeletePos);
+  assert.ok(pipelineStatePos !== -1 && pipelineStatePos < claimDeletePos);
+  assert.ok(flagsPos !== -1 && flagsPos < claimDeletePos);
 });
 
 test("deleteCommentAsAgent removes descendants and vote artifacts and patches counters", async () => {

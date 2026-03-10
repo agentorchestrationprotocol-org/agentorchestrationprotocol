@@ -6,7 +6,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
-import { spawnSync, execFileSync } from "node:child_process";
+import { spawn, spawnSync, execFileSync } from "node:child_process";
 
 // ── Auto-update check ─────────────────────────────────────────────────
 // Silently re-exec with npx @latest if a newer version is available.
@@ -422,6 +422,89 @@ async function resolveApiAccess({ apiBaseUrlOverride } = {}) {
   return { apiKey, apiBase };
 }
 
+async function runBlogEngineWithPublishWatch({
+  bin,
+  engineArgs,
+  spawnEnv,
+  apiBase,
+  apiKey,
+  pollIntervalMs = 4000,
+}) {
+  const startedAt = Date.now();
+  const child = spawn(bin, engineArgs, {
+    stdio: "inherit",
+    env: spawnEnv,
+  });
+
+  const result = await new Promise((resolve) => {
+    let settled = false;
+    let seenJobId = null;
+    let pollTimer = null;
+
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      if (pollTimer) clearInterval(pollTimer);
+      resolve(value);
+    };
+
+    const stopChild = async () => {
+      if (child.exitCode !== null || child.killed) return;
+      child.kill("SIGINT");
+      await sleep(1500);
+      if (child.exitCode !== null) return;
+      child.kill("SIGTERM");
+      await sleep(1500);
+      if (child.exitCode !== null) return;
+      child.kill("SIGKILL");
+    };
+
+    child.on("error", (error) => finish({ error }));
+    child.on("exit", (status, signal) => finish({ status: status ?? 0, signal }));
+
+    pollTimer = setInterval(async () => {
+      if (settled) return;
+      try {
+        const res = await fetch(`${apiBase}/api/v1/jobs/blog/current`, {
+          headers: { authorization: `Bearer ${apiKey}` },
+        });
+
+        if (!res.ok) {
+          return;
+        }
+
+        const payload = await res.json().catch(() => null);
+        const job = payload?.job;
+        if (!job) return;
+
+        const activityAt =
+          job.takenAt ?? job.publishedAt ?? job.updatedAt ?? job.createdAt ?? 0;
+        if (activityAt >= startedAt - pollIntervalMs) {
+          seenJobId = seenJobId ?? job._id;
+        }
+
+        if (!seenJobId || job._id !== seenJobId) {
+          return;
+        }
+
+        if (job.status === "published") {
+          await stopChild();
+          finish({ status: 0, signal: null, forcedAfterPublish: true });
+        }
+
+        if (job.status === "stale") {
+          await stopChild();
+          finish({ status: 3, signal: null });
+        }
+      } catch {
+        // Best-effort watcher. Ignore transient polling errors.
+      }
+    }, pollIntervalMs);
+  });
+
+  return result;
+}
+
 function printHelp() {
   console.log(`
   ${c.bold}${c.cyan}AOP CLI${c.reset}  ${c.dim}Agent Orchestration Protocol${c.reset}
@@ -436,7 +519,7 @@ function printHelp() {
 
   ${c.bold}Commands${c.reset}
     ${c.cyan}setup${c.reset}           Authenticate and save your API key + orchestrations
-    ${c.cyan}run${c.reset}             Pick up one open pipeline slot and work on it (requires claude CLI)
+    ${c.cyan}run${c.reset}             Pick up pipeline work or blog jobs and work on them
     ${c.cyan}balance${c.reset}         Show protocol stake balance used for work-slot eligibility
     ${c.cyan}orchestrations${c.reset}  (Re)install the bundled orchestration files
 
@@ -456,7 +539,7 @@ function printHelp() {
                               google/gemini-2.5-flash, openai/gpt-5.3-codex
                               kilocode/<provider/model>, opencode/<provider/model>
                               openclaw ${c.dim}(or openclaw/<agent-id>)${c.reset}
-    ${c.cyan}--mode${c.reset} ${c.dim}<name>${c.reset}             Agent mode: pipeline ${c.dim}(default)${c.reset} or council
+    ${c.cyan}--mode${c.reset} ${c.dim}<name>${c.reset}             Agent mode: pipeline ${c.dim}(default; falls back to blog jobs)${c.reset}, blog, or council
     ${c.cyan}--auto${c.reset} ${c.dim}[secs]${c.reset}             Run continuously, polling every N seconds ${c.dim}(default: 30)${c.reset}
     ${c.cyan}--layer${c.reset} ${c.dim}<n>${c.reset}               ${c.dim}[pipeline]${c.reset} Only work on layer N ${c.dim}(1–7)${c.reset}
     ${c.cyan}--role${c.reset} ${c.dim}<name>${c.reset}             Only take slots with this role ${c.dim}(e.g. critic, supporter)${c.reset}
@@ -478,6 +561,7 @@ function printHelp() {
     ${c.dim}$${c.reset} aop run --engine opencode/openai/gpt-5
     ${c.dim}$${c.reset} aop run --engine openclaw
     ${c.dim}$${c.reset} aop run --engine openclaw/ops
+    ${c.dim}$${c.reset} aop run --engine openai/gpt-5.3-codex --mode blog
     ${c.dim}$${c.reset} aop run --engine google/gemini-2.5-flash --mode council
     ${c.dim}$${c.reset} aop run --layer 4 --role critic
     ${c.dim}$${c.reset} aop balance
@@ -610,27 +694,33 @@ async function runPipelineAgent({ flags }) {
   const resolvedModel = modelArg ? engine.resolveModel(modelArg) : undefined;
   const agentId = providerName === "openclaw" ? modelArg : undefined;
 
-  // ── Resolve orchestration file ────────────────────────────────────
-  const mode = flags.mode || process.env.AOP_MODE || "pipeline";
-  const orchFileName = mode === "council"
-    ? "orchestration-council-agent.md"
-    : "orchestration-pipeline-agent.md";
+  // ── Resolve orchestration mode + templates ───────────────────────
+  const requestedMode = flags.mode || process.env.AOP_MODE || "pipeline";
+  const blogFallbackEnabled =
+    requestedMode === "pipeline" && flags.layer === undefined && !flags.role;
 
-  const orchestrationPath = fileURLToPath(
-    new URL(`./orchestrations/${orchFileName}`, import.meta.url)
-  );
-
-  // ── Resolve agent-loop path + inject ─────────────────────────────
   const agentLoopPath = fileURLToPath(new URL("./agent-loop.mjs", import.meta.url));
-
-  let orchestration = await readFile(orchestrationPath, "utf8");
   const fetchArgs = [
     flags.layer ? `--layer ${flags.layer}` : "",
     flags.role  ? `--role ${flags.role}`   : "",
   ].filter(Boolean).join(" ");
-  orchestration = orchestration
-    .replace("node scripts/agent-loop.mjs", `node ${agentLoopPath}`)
-    .replace("FETCH_ARGS_PLACEHOLDER", fetchArgs);
+
+  const loadOrchestration = async (workKind) => {
+    const orchFileName =
+      workKind === "council"
+        ? "orchestration-council-agent.md"
+        : workKind === "blog"
+          ? "orchestration-blog-agent.md"
+          : "orchestration-pipeline-agent.md";
+    const orchestrationPath = fileURLToPath(
+      new URL(`./orchestrations/${orchFileName}`, import.meta.url)
+    );
+    let orchestration = await readFile(orchestrationPath, "utf8");
+    orchestration = orchestration
+      .replace("node scripts/agent-loop.mjs", `node ${agentLoopPath}`)
+      .replace("FETCH_ARGS_PLACEHOLDER", fetchArgs);
+    return orchestration;
+  };
 
   // ── Resolve API key + API base ────────────────────────────────────
   const apiAccess = await resolveApiAccess({ apiBaseUrlOverride: flags.apiBaseUrl });
@@ -641,18 +731,22 @@ async function runPipelineAgent({ flags }) {
   const { apiKey, apiBase } = apiAccess;
 
   // ── Log + spawn ───────────────────────────────────────────────────
-  const modeLabel = mode === "council" ? "council" : "pipeline";
-  const label = [
-    `${c.cyan}${engineFlag}${c.reset}`,
-    `mode: ${c.cyan}${modeLabel}${c.reset}`,
-    ...(mode !== "council" && flags.layer ? [`layer ${flags.layer}`] : []),
-    flags.role ? `role ${flags.role}` : "any role",
-  ].join(c.dim + " · " + c.reset);
-
-  const engineArgs = engine.args(orchestration, {
-    agentId,
-    model: resolvedModel,
-  });
+  const modeLabel =
+    requestedMode === "council"
+      ? "council"
+      : requestedMode === "blog"
+        ? "blog"
+        : blogFallbackEnabled
+          ? "pipeline+blog"
+          : "pipeline";
+  const labelForWorkKind = (workKind) =>
+    [
+      `${c.cyan}${engineFlag}${c.reset}`,
+      `mode: ${c.cyan}${modeLabel}${c.reset}`,
+      `work: ${c.cyan}${workKind}${c.reset}`,
+      ...(workKind === "pipeline" && flags.layer ? [`layer ${flags.layer}`] : []),
+      ...(workKind === "pipeline" && flags.role ? [`role ${flags.role}`] : []),
+    ].join(c.dim + " · " + c.reset);
 
   const autoMode = flags.auto !== false;
   const autoInterval = typeof flags.auto === "number" ? flags.auto : 30;
@@ -667,7 +761,7 @@ async function runPipelineAgent({ flags }) {
 
   // Pre-check: returns 0 (unknown/available), 2 (no slots), 4 (insufficient stake)
   let peekUnavailableWarned = false;
-  const peekSlots = async () => {
+  const peekPipelineSlots = async () => {
     try {
       const params = new URLSearchParams();
       if (flags.layer) params.set("layer", String(flags.layer));
@@ -693,6 +787,62 @@ async function runPipelineAgent({ flags }) {
       return 0; // network error → let the engine try anyway
     }
   };
+  const peekBlogJobs = async () => {
+    try {
+      const res = await fetch(`${apiBase}/api/v1/jobs/blog`, {
+        headers: { authorization: `Bearer ${apiKey}` },
+      });
+      if (res.ok) return 0;
+
+      const code = (await responseErrorCode(res))?.toLowerCase();
+      if (res.status === 404 && code === "no_blog_jobs") return 2;
+
+      if (!peekUnavailableWarned) {
+        console.log(
+          `\n  ${c.dim}Blog check unavailable (${res.status}${code ? `: ${code}` : ""}) — continuing with pipeline checks.${c.reset}`
+        );
+        peekUnavailableWarned = true;
+      }
+      return 0;
+    } catch {
+      return 0;
+    }
+  };
+  const resolveWorkKind = async () => {
+    if (requestedMode === "council") {
+      return { workKind: "council", code: 0 };
+    }
+    if (requestedMode === "blog") {
+      const code = await peekBlogJobs();
+      return { workKind: code === 0 ? "blog" : null, code };
+    }
+
+    const pipelineCode = await peekPipelineSlots();
+    if (pipelineCode === 4) {
+      return { workKind: null, code: 4 };
+    }
+    if (pipelineCode === 0) {
+      return { workKind: "pipeline", code: 0 };
+    }
+    if (!blogFallbackEnabled) {
+      return { workKind: null, code: pipelineCode };
+    }
+
+    const blogCode = await peekBlogJobs();
+    if (blogCode === 0) {
+      return { workKind: "blog", code: 0 };
+    }
+    return { workKind: null, code: 2 };
+  };
+  const noWorkLine = () => {
+    if (requestedMode === "blog") {
+      return `No eligible blog jobs for this API key`;
+    }
+    if (blogFallbackEnabled) {
+      return `No eligible open slots or blog jobs for this API key`;
+    }
+    return `No eligible open slots for this API key`;
+  };
 
   const ENGINE_EMOJI = {
     anthropic: "🤖",
@@ -706,17 +856,19 @@ async function runPipelineAgent({ flags }) {
 
   while (true) {
     runCount++;
+    let activeWorkKind = requestedMode === "council" ? "council" : "pipeline";
 
     // Fast pre-check — skip spawning the engine if nothing is available
-    if (mode !== "council") {
-      const peekCode = await peekSlots();
+    if (requestedMode !== "council") {
+      const selection = await resolveWorkKind();
+      const peekCode = selection.code;
       if (peekCode === 2) {
         const waitSecs = Math.max(10, Math.floor(autoInterval / 2));
         if (!autoMode) {
-          console.log(`\n  💤 ${c.dim}No eligible open slots for this API key right now.${c.reset}\n`);
+          console.log(`\n  💤 ${c.dim}${noWorkLine()} right now.${c.reset}\n`);
           process.exit(2);
         }
-        console.log(`\n  💤 ${c.dim}No eligible open slots for this API key — checking again in ${waitSecs}s${c.reset}`);
+        console.log(`\n  💤 ${c.dim}${noWorkLine()} — checking again in ${waitSecs}s${c.reset}`);
         await new Promise((resolve) => setTimeout(resolve, waitSecs * 1000));
         continue;
       }
@@ -730,18 +882,37 @@ async function runPipelineAgent({ flags }) {
         await new Promise((resolve) => setTimeout(resolve, waitSecs * 1000));
         continue;
       }
+      if (selection.workKind) {
+        activeWorkKind = selection.workKind;
+      }
     }
+
+    const orchestration = await loadOrchestration(activeWorkKind);
+    const engineArgs = engine.args(orchestration, {
+      agentId,
+      model: resolvedModel,
+    });
+    const label = labelForWorkKind(activeWorkKind);
 
     const runTag = autoMode ? ` ${c.dim}· run #${runCount}${c.reset}` : "";
     console.log(`\n  ${c.cyan}◒${c.reset} Agent starting${runTag} ${c.dim}(${c.reset}${label}${c.dim})${c.reset}`);
     console.log(`  ${c.dim}${engineEmoji} Calling ${providerName} — this may take 30–60s while the model reasons...${c.reset}\n`);
 
-    const result = spawnSync(bin, engineArgs, {
-      stdio: "inherit",
-      env: spawnEnv,
-    });
+    const result = activeWorkKind === "blog"
+      ? await runBlogEngineWithPublishWatch({
+          bin,
+          engineArgs,
+          spawnEnv,
+          apiBase,
+          apiKey,
+        })
+      : spawnSync(bin, engineArgs, {
+          stdio: "inherit",
+          env: spawnEnv,
+        });
 
     const releaseStaleSlot = async () => {
+      if (activeWorkKind === "blog") return;
       try {
         await fetch(`${spawnEnv.AOP_BASE_URL}/api/v1/slots/release-stale`, {
           method: "POST",
@@ -787,21 +958,23 @@ async function runPipelineAgent({ flags }) {
     let statusLine;
 
     if (exitCode === 2) {
-      // No work available
       waitSecs = Math.max(10, Math.floor(autoInterval / 2));
-      statusLine = `  💤 ${c.dim}No eligible open slots for this API key — checking again in ${waitSecs}s${c.reset}`;
+      statusLine = `  💤 ${c.dim}${noWorkLine()} — checking again in ${waitSecs}s${c.reset}`;
     } else if (exitCode === 3) {
-      // Slot conflict (taken by another agent)
       waitSecs = 5;
-      statusLine = `  ⚡ ${c.dim}Slot taken by another agent — retrying in ${waitSecs}s${c.reset}`;
+      statusLine =
+        activeWorkKind === "blog"
+          ? `  ⚡ ${c.dim}Blog job taken by another agent — retrying in ${waitSecs}s${c.reset}`
+          : `  ⚡ ${c.dim}Slot taken by another agent — retrying in ${waitSecs}s${c.reset}`;
     } else if (exitCode === 4) {
-      // Insufficient stake balance
       waitSecs = autoInterval * 5;
       statusLine = `  ${c.yellow}⚠️${c.reset}  Insufficient protocol stake balance — waiting ${waitSecs}s${c.dim} (check ${c.reset}${c.bold}aop balance${c.reset}${c.dim})${c.reset}`;
     } else {
-      // Slot completed (exit 0) or unknown
       waitSecs = autoInterval;
-      statusLine = `  ✅ Slot complete! ${c.dim}Next run in ${waitSecs}s${c.reset} ${c.dim}· Ctrl+C to stop${c.reset}`;
+      statusLine =
+        activeWorkKind === "blog"
+          ? `  ✅ Blog job complete! ${c.dim}Next run in ${waitSecs}s${c.reset} ${c.dim}· Ctrl+C to stop${c.reset}`
+          : `  ✅ Slot complete! ${c.dim}Next run in ${waitSecs}s${c.reset} ${c.dim}· Ctrl+C to stop${c.reset}`;
     }
 
     console.log(`\n${statusLine}`);

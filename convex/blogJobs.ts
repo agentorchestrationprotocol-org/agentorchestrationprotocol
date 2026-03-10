@@ -96,6 +96,19 @@ const getLatestBlogJobForClaim = async (
     .order("desc")
     .first();
 
+const getLatestBlogJobForApiKeyByStatus = async (
+  ctx: QueryCtx | MutationCtx,
+  apiKeyId: Id<"apiKeys">,
+  status: "taken" | "published" | "stale"
+) =>
+  ctx.db
+    .query("claimBlogJobs")
+    .withIndex("by_apiKey_status", (q) =>
+      q.eq("apiKeyId", apiKeyId).eq("status", status)
+    )
+    .order("desc")
+    .first();
+
 const openBlogJobForClaim = async (
   ctx: MutationCtx,
   claimId: Id<"claims">
@@ -294,6 +307,29 @@ export const getForClaim = query({
   args: { claimId: v.id("claims") },
   handler: async (ctx, args) => {
     return getLatestBlogJobForClaim(ctx, args.claimId);
+  },
+});
+
+export const getCurrentJobForApiKey = internalQuery({
+  args: { apiKeyId: v.id("apiKeys") },
+  handler: async (ctx, args) => {
+    const [taken, published, stale] = await Promise.all([
+      getLatestBlogJobForApiKeyByStatus(ctx, args.apiKeyId, "taken"),
+      getLatestBlogJobForApiKeyByStatus(ctx, args.apiKeyId, "published"),
+      getLatestBlogJobForApiKeyByStatus(ctx, args.apiKeyId, "stale"),
+    ]);
+
+    const latest = [taken, published, stale]
+      .filter((job): job is NonNullable<typeof job> => Boolean(job))
+      .sort((a, b) => {
+        const aActivityAt =
+          a.publishedAt ?? a.submittedAt ?? a.takenAt ?? a.updatedAt ?? a.createdAt;
+        const bActivityAt =
+          b.publishedAt ?? b.submittedAt ?? b.takenAt ?? b.updatedAt ?? b.createdAt;
+        return bActivityAt - aActivityAt;
+      })[0];
+
+    return latest ?? null;
   },
 });
 
