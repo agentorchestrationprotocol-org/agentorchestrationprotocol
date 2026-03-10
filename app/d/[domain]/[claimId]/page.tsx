@@ -306,6 +306,25 @@ export default function ClaimDetailPage() {
     );
   }
 
+  const readerModeHref = blogArticle
+    ? `/blog/${blogArticle.domain}/${blogArticle.claimId}`
+    : `/blog/${claim.domain}/${claim._id}`;
+  const showReaderModePanel = Boolean(blogArticle || pendingBlogLabel);
+  const readerModeRecommendationClass = (() => {
+    switch (blogArticle?.recommendation) {
+      case "accept":
+        return "bg-green-500/15 text-green-300 border border-green-500/30";
+      case "accept-with-caveats":
+        return "bg-yellow-500/15 text-yellow-300 border border-yellow-500/30";
+      case "reject":
+        return "bg-red-500/15 text-red-300 border border-red-500/30";
+      case "needs-more-evidence":
+        return "bg-zinc-500/15 text-zinc-300 border border-zinc-500/30";
+      default:
+        return "bg-cyan-500/15 text-cyan-200 border border-cyan-400/20";
+    }
+  })();
+
   return (
     <main className="mx-auto max-w-5xl px-4 py-8 space-y-6">
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
@@ -363,17 +382,6 @@ export default function ClaimDetailPage() {
 
             <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-[var(--muted)]">
               <span>{claim.commentCount ?? 0} comments</span>
-              {blogArticle && (
-                <Link
-                  href={`/blog/${claim.domain}/${claim._id}`}
-                  className="btn-secondary inline-flex items-center px-3 py-1.5 text-xs font-semibold text-[var(--ink)]"
-                >
-                  Read article
-                </Link>
-              )}
-              {pendingBlogLabel && (
-                <span className="chip pointer-events-none">{pendingBlogLabel}</span>
-              )}
               <SaveClaimButton claimId={claim._id} className="btn-ghost inline-flex items-center px-2.5 py-1.5 text-xs font-semibold" />
               <ShareToXButton
                 title={claim.title}
@@ -401,6 +409,83 @@ export default function ClaimDetailPage() {
               </button>
               <ReportContentButton targetType="claim" claimId={claim._id} />
             </div>
+
+            {showReaderModePanel && (
+              <div className="relative mt-6 overflow-hidden rounded-[1.75rem] border border-white/10 bg-[linear-gradient(145deg,rgba(9,18,32,0.94),rgba(10,27,46,0.78))] p-5 shadow-[0_20px_50px_rgba(0,0,0,0.22)] sm:p-6">
+                <div className="absolute inset-0 -z-10">
+                  <div className="absolute -top-12 right-[-4rem] h-40 w-40 rounded-full bg-cyan-400/10 blur-3xl" />
+                  <div className="absolute bottom-[-3rem] left-[-2rem] h-32 w-32 rounded-full bg-blue-500/10 blur-3xl" />
+                </div>
+
+                <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+                  <div className="max-w-2xl">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-200/85">
+                      Reader Mode
+                    </p>
+                    <h3 className="mt-3 text-2xl font-semibold tracking-tight text-[var(--ink)]">
+                      {blogArticle
+                        ? "Prefer the plated version of this claim?"
+                        : "A reader-friendly version of this claim is on the way"}
+                    </h3>
+                    <p className="mt-3 text-sm leading-relaxed text-[var(--ink-soft)] sm:text-[15px]">
+                      {blogArticle
+                        ? "This page keeps the full audit trail. The article version serves the same claim as a faster read with a clear TL;DR, the core reasoning, caveats, and sources."
+                        : `${pendingBlogLabel}. The raw claim is ready now; the article pass will land here as soon as the writing job publishes.`}
+                    </p>
+
+                    <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
+                      {blogArticle?.recommendationLabel && (
+                        <span className={`rounded-full px-2.5 py-1 font-semibold ${readerModeRecommendationClass}`}>
+                          {blogArticle.recommendationLabel}
+                        </span>
+                      )}
+                      {blogArticle && (
+                        <>
+                          <span className="chip pointer-events-none">
+                            {blogArticle.readTimeMinutes} min read
+                          </span>
+                          <span className="chip pointer-events-none">
+                            Published {formatTimeAgo(blogArticle.publishedAt)}
+                          </span>
+                        </>
+                      )}
+                      {!blogArticle && pendingBlogLabel && (
+                        <span className="chip pointer-events-none">{pendingBlogLabel}</span>
+                      )}
+                    </div>
+
+                    <p className="mt-4 text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
+                      Includes: TL;DR · what was being asked · why the system leaned this way · caveats · sources
+                    </p>
+                  </div>
+
+                  <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#08111d]/75 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+                      Same claim, easier entry point
+                    </p>
+                    <p className="mt-2 text-sm leading-relaxed text-[var(--ink-soft)]">
+                      {blogArticle
+                        ? "Start with the article if you want the readable pass first, then come back here for the raw consensus and pipeline trace."
+                        : "Once the article is published, this box becomes the fast route into the same claim from a reader-first angle."}
+                    </p>
+
+                    {blogArticle ? (
+                      <Link
+                        href={readerModeHref}
+                        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--accent-hover)]"
+                      >
+                        Read the article
+                        <span aria-hidden>→</span>
+                      </Link>
+                    ) : (
+                      <div className="mt-4 inline-flex w-full items-center justify-center rounded-full border border-white/10 px-4 py-2.5 text-sm font-semibold text-[var(--muted)]">
+                        Article link appears here when published
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             <Authenticated>
               <DeleteClaimButton claimId={claim._id} authorId={claim.authorId} />
