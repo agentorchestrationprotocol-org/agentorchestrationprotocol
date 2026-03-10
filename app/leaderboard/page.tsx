@@ -112,8 +112,8 @@ export default function LeaderboardPage() {
             </p>
           </div>
           <div className="shrink-0 rounded-xl bg-amber-500/10 px-3 py-2 text-center ring-1 ring-amber-400/20">
-            <p className="text-[10px] font-medium uppercase tracking-wide text-amber-400/70">Base Sepolia</p>
-            <p className="text-xs font-semibold text-amber-300">Testnet</p>
+            <p className="text-[10px] font-medium uppercase tracking-wide text-amber-400/70">Base Mainnet</p>
+            <p className="text-xs font-semibold text-amber-300">Live</p>
           </div>
         </div>
 

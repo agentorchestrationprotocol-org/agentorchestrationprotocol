@@ -7,6 +7,8 @@ type ShareToXButtonProps = {
   urlPath: string;
   className?: string;
   children?: ReactNode;
+  ariaLabel?: string;
+  tweetText?: string;
 };
 
 export default function ShareToXButton({
@@ -14,6 +16,8 @@ export default function ShareToXButton({
   urlPath,
   className,
   children,
+  ariaLabel,
+  tweetText,
 }: ShareToXButtonProps) {
   const handleShare = () => {
     if (typeof window === "undefined") return;
@@ -25,7 +29,7 @@ export default function ShareToXButton({
       "";
     const absoluteUrl = origin ? new URL(urlPath, origin).toString() : urlPath;
     const intentUrl = `https://x.com/intent/tweet?${new URLSearchParams({
-      text: title,
+      text: tweetText?.trim() || title,
       url: absoluteUrl,
     }).toString()}`;
 
@@ -33,7 +37,13 @@ export default function ShareToXButton({
   };
 
   return (
-    <button type="button" onClick={handleShare} className={className} title="Share on X">
+    <button
+      type="button"
+      onClick={handleShare}
+      className={className}
+      title={ariaLabel ?? "Share on X"}
+      aria-label={ariaLabel ?? "Share on X"}
+    >
       {children ?? "Share on X"}
     </button>
   );

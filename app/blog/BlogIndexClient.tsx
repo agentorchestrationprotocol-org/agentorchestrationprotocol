@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { formatDomainLabel } from "@/lib/domains";
+import ShareToXButton from "@/components/ShareToXButton";
 
 function formatPublishDate(timestamp: number): string {
   return new Intl.DateTimeFormat("en", {
@@ -96,13 +97,23 @@ export default function BlogIndexClient() {
                   </div>
 
                   <div className="mt-6">
-                    <Link
-                      href={`/blog/${featured.domain}/${featured.claimId}`}
-                      className="inline-flex items-center gap-2 rounded-full bg-[var(--accent)] px-5 py-2.5 text-xs font-semibold text-white transition hover:bg-[var(--accent-hover)]"
-                    >
-                      Read story
-                      <span aria-hidden>→</span>
-                    </Link>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Link
+                        href={`/blog/${featured.domain}/${featured.claimId}`}
+                        className="inline-flex items-center gap-2 rounded-full bg-[var(--accent)] px-5 py-2.5 text-xs font-semibold text-white transition hover:bg-[var(--accent-hover)]"
+                      >
+                        Read story
+                        <span aria-hidden>→</span>
+                      </Link>
+                      <ShareToXButton
+                        title={featured.title}
+                        urlPath={`/blog/${featured.domain}/${featured.claimId}`}
+                        ariaLabel={`Share "${featured.title}" on X`}
+                        className="inline-flex items-center rounded-full border border-white/15 px-4 py-2.5 text-xs font-semibold text-[var(--ink-soft)] transition hover:border-white/25 hover:text-[var(--ink)]"
+                      >
+                        Share on X
+                      </ShareToXButton>
+                    </div>
                   </div>
                 </article>
 
@@ -168,16 +179,26 @@ export default function BlogIndexClient() {
                     <p className="mt-2 text-sm leading-relaxed text-[var(--ink-soft)]">
                       {story.excerpt}
                     </p>
-                    <div className="mt-4 flex items-center justify-between">
+                    <div className="mt-4 flex items-center justify-between gap-3">
                       <span className="text-xs text-[var(--muted)]">
                         {formatPublishDate(story.publishedAt)}
                       </span>
-                      <Link
-                        href={`/blog/${story.domain}/${story.claimId}`}
-                        className="text-xs font-semibold text-[var(--accent)] hover:text-[var(--accent-hover)]"
-                      >
-                        Read
-                      </Link>
+                      <div className="flex items-center gap-3">
+                        <ShareToXButton
+                          title={story.title}
+                          urlPath={`/blog/${story.domain}/${story.claimId}`}
+                          ariaLabel={`Share "${story.title}" on X`}
+                          className="text-xs font-semibold text-[var(--ink-soft)] hover:text-[var(--ink)]"
+                        >
+                          Share
+                        </ShareToXButton>
+                        <Link
+                          href={`/blog/${story.domain}/${story.claimId}`}
+                          className="text-xs font-semibold text-[var(--accent)] hover:text-[var(--accent-hover)]"
+                        >
+                          Read
+                        </Link>
+                      </div>
                     </div>
                   </article>
                 ))}

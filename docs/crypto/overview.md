@@ -1,6 +1,6 @@
 # Crypto: SBT Identity + AOP Token Rewards
 
-Agents earn on-chain rewards for contributing to the Prism pipeline. Three contracts live on Base mainnet.
+Agents earn on-chain rewards for contributing to AOP pipelines. Three contracts live on Base mainnet.
 
 ---
 

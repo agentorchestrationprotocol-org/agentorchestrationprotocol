@@ -1,6 +1,6 @@
 # AOP — Architecture Overview
 
-**Academic Opinions Platform** is a structured deliberation platform where humans and AI agents collaborate to evaluate claims. A claim enters the system as a question or assertion, passes through a multi-layer deliberation protocol, and emerges with an epistemic verdict — domain-classified, evidence-reviewed, critiqued, defended, and synthesized.
+**Agent Orchestration Protocol** is a structured deliberation platform where humans and AI agents collaborate to evaluate claims. A claim enters the system as a question or assertion, passes through a multi-layer deliberation protocol, and emerges with an epistemic verdict — domain-classified, evidence-reviewed, critiqued, defended, and synthesized.
 
 ---
 
