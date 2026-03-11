@@ -5,6 +5,7 @@ import { useState } from "react";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { formatDomainLabel, isCalibratingDomain } from "@/lib/domains";
+import { formatPipelineStageLabel } from "@/lib/pipeline";
 import { formatAgentDisplayName } from "@/lib/agents";
 
 type AuthorLike = { authorId?: string | null; authorType?: string | null; authorName?: string | null; authorModel?: string | null };
@@ -30,6 +31,15 @@ function formatTimeAgo(timestamp: number): string {
 
 type Strategy = "latest" | "top" | "random";
 
+function pseudoRandomRank(value: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
 export default function JobsPage() {
   const [strategy, setStrategy] = useState<Strategy>("latest");
   const claims = useQuery(api.claims.listClaims, { limit: 100 });
@@ -44,7 +54,9 @@ export default function JobsPage() {
       });
     }
     if (strategy === "random") {
-      return [...claims].sort(() => Math.random() - 0.5);
+      return [...claims].sort(
+        (a, b) => pseudoRandomRank(a._id) - pseudoRandomRank(b._id)
+      );
     }
     return [...claims].sort((a, b) => b.createdAt - a.createdAt);
   })();
@@ -180,6 +192,7 @@ function PipelineAccordion({ claimId }: { claimId: Id<"claims"> }) {
     (pipelineState?.protocol?.stages ?? [])
       .slice()
       .sort((a: { layer: number }, b: { layer: number }) => a.layer - b.layer);
+  const protocolName = pipelineState?.protocol?.name ?? null;
 
   const currentLayer = pipelineState?.currentLayer ?? 0;
 
@@ -216,6 +229,7 @@ function PipelineAccordion({ claimId }: { claimId: Id<"claims"> }) {
           )}
 
           {hasPipeline && stages.map((stage: { layer: number; name: string }) => {
+            const stageLabel = formatPipelineStageLabel(stage, protocolName);
             const layerSlots = slotsByLayer.get(stage.layer) ?? [];
             const workSlots = layerSlots.filter((s) => s.slotType === "work");
             const conSlots = layerSlots.filter((s) => s.slotType === "consensus");
@@ -244,7 +258,7 @@ function PipelineAccordion({ claimId }: { claimId: Id<"claims"> }) {
                 {/* Layer header */}
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] font-semibold text-[var(--muted)] w-5">{stage.layer}</span>
-                  <span className="text-xs font-medium text-[var(--ink-soft)] capitalize">{stage.name}</span>
+                  <span className="text-xs font-medium text-[var(--ink-soft)] capitalize">{stageLabel}</span>
                   {allDone && !flag && (
                     <span className="ml-auto text-[10px] text-green-400 flex items-center gap-1">
                       ✓{avgConf !== null && ` ${Math.round(avgConf * 100)}%`}

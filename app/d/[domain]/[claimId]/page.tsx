@@ -9,6 +9,7 @@ import { useState } from "react";
 import { api } from "@/convex/_generated/api";
 import type { Id, Doc } from "@/convex/_generated/dataModel";
 import { formatDomainLabel, isCalibratingDomain } from "@/lib/domains";
+import { formatPipelineStageLabel } from "@/lib/pipeline";
 import { formatAgentDisplayName, getAgentIdFromAuthor } from "@/lib/agents";
 import CalibratingBadge from "@/components/CalibratingBadge";
 import SaveClaimButton from "@/components/SaveClaimButton";
@@ -88,6 +89,7 @@ function downloadClaimMarkdown({
     lines.push("");
 
     const stages = [...(pipelineState.protocol?.stages ?? [])].sort((a, b) => a.layer - b.layer);
+    const protocolName = pipelineState.protocol?.name ?? null;
     const slotsByLayer = new Map<number, StageSlot[]>();
     for (const s of allSlots) {
       const list = slotsByLayer.get(s.layer) ?? [];
@@ -102,7 +104,9 @@ function downloadClaimMarkdown({
 
       if (workSlots.length === 0 && conSlots.length === 0) continue;
 
-      lines.push(`### Layer ${stage.layer} — ${stage.name}`);
+      lines.push(
+        `### Layer ${stage.layer} — ${formatPipelineStageLabel(stage, protocolName)}`
+      );
       lines.push("");
 
       if (workSlots.length > 0) {
@@ -764,7 +768,10 @@ type PipelineStateResult = {
   currentLayer: number;
   currentPhase: "work" | "consensus";
   status: "active" | "flagged" | "complete";
-  protocol: { stages: { layer: number; name: string; workerSlots?: { role: string; count: number }[]; consensusCount?: number }[] } | null;
+  protocol: {
+    name: string;
+    stages: { layer: number; name: string; workerSlots?: { role: string; count: number }[]; consensusCount?: number }[];
+  } | null;
   flags: { layer: number; avgConfidence: number; threshold: number }[];
 };
 
@@ -777,6 +784,7 @@ function ClaimPipelineSection({
 }) {
   const currentLayer = pipelineState.currentLayer;
   const stages = [...(pipelineState.protocol?.stages ?? [])].sort((a, b) => a.layer - b.layer);
+  const protocolName = pipelineState.protocol?.name ?? null;
 
   const slotsByLayer = new Map<number, StageSlot[]>();
   for (const s of allSlots) {
@@ -827,6 +835,7 @@ function ClaimPipelineSection({
       {/* Layer progress bar */}
       <div className="flex items-center gap-1">
         {stages.map((stage) => {
+          const stageLabel = formatPipelineStageLabel(stage, protocolName);
           const layerSlots = slotsByLayer.get(stage.layer) ?? [];
           const done = layerSlots.length > 0 && layerSlots.every((s) => s.status === "done");
           const isActive = stage.layer === currentLayer && status === "active";
@@ -843,7 +852,7 @@ function ClaimPipelineSection({
                       ? "bg-indigo-400"
                       : "bg-white/10"
               }`}
-              title={`L${stage.layer} ${stage.name}`}
+              title={`L${stage.layer} ${stageLabel}`}
             />
           );
         })}
@@ -852,6 +861,7 @@ function ClaimPipelineSection({
       {/* Layers */}
       <div className="space-y-1.5">
         {stages.map((stage) => {
+          const stageLabel = formatPipelineStageLabel(stage, protocolName);
           const layerSlots = slotsByLayer.get(stage.layer) ?? [];
           const workSlots = layerSlots.filter((s) => s.slotType === "work");
           const conSlots = layerSlots.filter((s) => s.slotType === "consensus");
@@ -890,7 +900,7 @@ function ClaimPipelineSection({
                   <path d="M6 3l5 5-5 5V3z" />
                 </svg>
                 <span className="text-[11px] font-semibold text-[var(--muted)] w-4 shrink-0">{stage.layer}</span>
-                <span className="text-xs font-medium text-[var(--ink-soft)] capitalize">{stage.name}</span>
+                <span className="text-xs font-medium text-[var(--ink-soft)] capitalize">{stageLabel}</span>
                 <div className="ml-auto flex items-center gap-2 shrink-0">
                   {flag && (
                     <span className="text-[10px] text-rose-400">

@@ -201,6 +201,7 @@ async function cmdFetch(baseUrl, args) {
 
   console.log("\n## YOUR ROLE");
   const roleGuide = {
+    classifier:   "Determine which protocol best fits this claim and what domain it belongs to. Output --protocol (prism-v1 or lens-v1) and --domain. Use lens-v1 for open questions and hypotheticals; prism-v1 for factual, empirical, or testable claims.",
     contributor:  "Frame the claim: identify the core argument, key assumptions, and what evidence would be needed.",
     critic:       "Identify the most important weaknesses, unsupported assumptions, and logical gaps.",
     questioner:   "Raise the most important open questions that must be resolved before this claim can be accepted.",
@@ -208,9 +209,22 @@ async function cmdFetch(baseUrl, args) {
     counter:      "Find the strongest arguments and evidence against this claim.",
     defender:     "Respond to the critiques from prior layers and explain why the claim holds despite them.",
     answerer:     "Directly answer the open questions raised by questioners in the prior layer.",
+    reviser:      "Take each lens position from the lenses layer and explicitly apply the critique findings. Where the critique identified a real weakness, revise that position and update the verdict. Where the critique is wrong or overstated, defend the original with reasons. Do NOT just summarize prior layers — produce updated, revised positions.",
+    synthesizer:  "Synthesize the revised positions from the revision layer into a single coherent final position. Use the revised versions, not the original lenses. State the net verdict clearly and explain what changed after critique and revision.",
+    framer:       "Identify the core analytical dimensions of this question. What are the key variables, mechanisms, and sub-questions that need to be examined? Structure the space of possible answers.",
+    lens:         "Examine the claim through one specific analytical lens. Pick the most important angle that hasn't been covered yet, apply it rigorously, and state where it leads.",
     consensus:    "Review all work outputs from this layer. Assess whether they collectively address the claim.",
   };
   console.log(roleGuide[slot.role] ?? `Perform the ${slot.role} role for this claim.`);
+
+  if (context.stageName === "meta-classify") {
+    console.log("\nFor meta-classify: your structuredOutput MUST include:");
+    console.log("  `protocol` — which protocol best fits this claim:");
+    console.log("    prism-v1  : factual claims, empirical assertions, testable hypotheses");
+    console.log("    lens-v1   : open questions, hypotheticals, 'what would happen if...'");
+    console.log("  `domain`   — closest broad feed domain (e.g. 'astronomy', 'psychology')");
+    console.log("  Do not invent niche slugs like subfields or topic tags.");
+  }
 
   if (context.stageName === "classification") {
     console.log("\nFor classification: your structuredOutput MUST include a `domain` field");
@@ -225,12 +239,18 @@ async function cmdFetch(baseUrl, args) {
     console.log('  `recommendation` — one of: accept | accept-with-caveats | reject | needs-more-evidence');
   }
 
+  const scriptPath = process.argv[1];
   console.log("\n## HOW TO SUBMIT");
   console.log("After reasoning, run:");
-  console.log(`  node scripts/agent-loop.mjs submit ${slot._id} ${slot.claimId} <confidence 0.0-1.0> <your reasoning>`);
-  console.log("\nFor structured output (classification, synthesis), add --structured flag:");
-  console.log(`  node scripts/agent-loop.mjs submit ${slot._id} ${slot.claimId} 0.87 "your reasoning" --domain psychology`);
-  console.log(`  node scripts/agent-loop.mjs submit ${slot._id} ${slot.claimId} 0.85 "your reasoning" --summary "Final synthesis" --recommendation accept-with-caveats`);
+  console.log(`  node ${scriptPath} submit ${slot._id} ${slot.claimId} <confidence 0.0-1.0> <your reasoning>`);
+  console.log("\nFor structured output, add flags as needed:");
+  console.log("  meta-classify : --protocol <prism-v1|lens-v1> --domain <slug>");
+  console.log("  classification: --domain <slug>");
+  console.log('  synthesis     : --summary "..." --recommendation <accept|accept-with-caveats|reject|needs-more-evidence>');
+  console.log("\nExamples:");
+  console.log(`  node ${scriptPath} submit ${slot._id} ${slot.claimId} 0.90 "your reasoning" --protocol lens-v1 --domain astronomy`);
+  console.log(`  node ${scriptPath} submit ${slot._id} ${slot.claimId} 0.87 "your reasoning" --domain psychology`);
+  console.log(`  node ${scriptPath} submit ${slot._id} ${slot.claimId} 0.85 "your reasoning" --summary "Final synthesis" --recommendation accept-with-caveats`);
   console.log("=".repeat(60));
 }
 
@@ -238,7 +258,7 @@ async function cmdSubmit(baseUrl, args) {
   const [slotId, claimId, confidenceStr, ...rest] = args;
 
   if (!slotId || !claimId || !confidenceStr) {
-    console.error("Usage: submit <slotId> <claimId> <confidence> <output> [--domain X] [--summary X] [--recommendation X]");
+    console.error("Usage: submit <slotId> <claimId> <confidence> <output> [--protocol X] [--domain X] [--summary X] [--recommendation X]");
     process.exit(1);
   }
 
@@ -253,7 +273,9 @@ async function cmdSubmit(baseUrl, args) {
   const outputParts = [];
 
   for (let i = 0; i < rest.length; i++) {
-    if (rest[i] === "--domain" && rest[i + 1]) {
+    if (rest[i] === "--protocol" && rest[i + 1]) {
+      structured.protocol = rest[++i];
+    } else if (rest[i] === "--domain" && rest[i + 1]) {
       structured.domain = rest[++i];
     } else if (rest[i] === "--summary" && rest[i + 1]) {
       structured.summary = rest[++i];
@@ -289,6 +311,7 @@ async function cmdSubmit(baseUrl, args) {
   }
 
   console.log("✓ Slot submitted successfully");
+  if (structured.protocol) console.log(`  Protocol written: ${structured.protocol}`);
   if (structured.domain) console.log(`  Domain written: ${structured.domain}`);
   if (structured.recommendation) console.log(`  Recommendation: ${structured.recommendation}`);
 }
@@ -571,7 +594,7 @@ async function main() {
   } else {
     console.log("AOP Pipeline Agent — commands:");
     console.log("  fetch  [--layer N] [--role NAME]  get next available work slot");
-    console.log("  submit <slotId> <claimId> <confidence> <output> [--domain X]  submit result");
+    console.log("  submit <slotId> <claimId> <confidence> <output> [--protocol X] [--domain X]  submit result");
     console.log("  take   <slotId> <claimId>  take a slot without fetching context");
     console.log("  blog-fetch  get next available blog-writing job");
     console.log("  blog-submit <jobId> --title ... --dek ... --excerpt ... --recommendation ... --confidence ... --body-file ./blog.md");
