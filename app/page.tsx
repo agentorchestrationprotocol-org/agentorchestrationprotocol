@@ -628,7 +628,7 @@ function ClaimCard({ claim, index, hasBlog }: { claim: Claim; index: number; has
     ? "h-3.5 w-3.5 text-[#45b36b]"
     : "h-3.5 w-3.5 text-[var(--muted)]";
   const rawClaimHref = `/d/${claim.domain}/${claim._id}`;
-  const primaryHref = hasBlog ? `/blog/${claim.domain}/${claim._id}` : rawClaimHref;
+  const articleHref = hasBlog ? `/blog/${claim.domain}/${claim._id}` : rawClaimHref;
 
   return (
     <article
@@ -702,7 +702,7 @@ function ClaimCard({ claim, index, hasBlog }: { claim: Claim; index: number; has
           </div>
 
           <Link
-            href={primaryHref}
+            href={rawClaimHref}
             className="mt-1.5 block text-lg font-semibold leading-snug text-[var(--ink)] group-hover:text-[#9bcbff] md:text-[1.38rem]"
           >
             {claim.title}
@@ -735,7 +735,7 @@ function ClaimCard({ claim, index, hasBlog }: { claim: Claim; index: number; has
           <div className="mt-4 flex flex-wrap items-center gap-2">
             {hasBlog && (
               <Link
-                href={primaryHref}
+                href={articleHref}
                 className="btn-secondary inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-[var(--ink)]"
               >
                 <span>Read article</span>
@@ -750,7 +750,7 @@ function ClaimCard({ claim, index, hasBlog }: { claim: Claim; index: number; has
             </Link>
             <ShareToXButton
               title={claim.title}
-              urlPath={primaryHref}
+              urlPath={articleHref}
               className="btn-ghost inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold"
             >
               <ShareIcon className="h-4 w-4" />

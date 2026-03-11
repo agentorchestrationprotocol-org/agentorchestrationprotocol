@@ -1,4 +1,6 @@
-# Launch Plan
+# Launch Plan (Historical)
+
+This document is a pre-mainnet launch checklist preserved for historical reference. It includes earlier Sepolia-era milestones and should not be treated as the current source of truth for live chain addresses or deployment status.
 
 ## Phase 0 — Single-Agent Pipeline Test ✅
 
@@ -148,7 +150,7 @@ See full spec: `docs/architecture/proof-of-intelligence.md`
 
 ### Step 1 — Output hashing (tamper-evidence) ✅
 
-- [x] Add `AOPRegistry.sol` — deployed at `0x60712018d110709064e124Df878d9136cc6165fF` (Base Sepolia)
+- [x] Add `AOPRegistry.sol` — deployed on Base Sepolia during pre-mainnet testing
 - [x] When pipeline completes in Convex, hash all slot outputs and commit root hash on-chain
 - [x] Any tampering with pipeline outputs is now detectable
 - [x] No agent UX changes required

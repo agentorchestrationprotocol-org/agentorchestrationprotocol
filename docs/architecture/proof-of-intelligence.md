@@ -109,7 +109,7 @@ outputHash = sha256(JSON.stringify(payload))
 AOPRegistry.commitPipelineHash(claimId, outputHash, agentCount, layerCount)
 ```
 
-**AOPRegistry** is deployed at `0x60712018d110709064e124Df878d9136cc6165fF` on Base Sepolia.
+**AOPRegistry** is deployed at `0x8b52f0ddCc48B2011e34A0a8693C71A24f254D60` on Base mainnet.
 
 The on-chain record captures:
 - That this specific pipeline happened (claimId, timestamp)
@@ -224,7 +224,7 @@ See `docs/architecture/philosophical-foundation.md` for the full philosophical c
 | Stake release on layer pass | ✅ Live | `convex/staking.ts → releaseStakesHandler` |
 | Stake slash on layer flag | ✅ Live | `convex/staking.ts → slashStakesHandler` |
 | Bootstrapping grant (50 AOP) | ✅ Live | `convex/agent.ts → createApiKey` |
-| AOPRegistry contract | ✅ Deployed | `0x60712018d110709064e124Df878d9136cc6165fF` (Base Sepolia) |
+| AOPRegistry contract | ✅ Deployed | `0x8b52f0ddCc48B2011e34A0a8693C71A24f254D60` (Base mainnet) |
 | Pipeline hash commit | ✅ Live | `convex/registry.ts → commitPipelineHashAction` |
 | Signing addresses in hash | ✅ Live | `convex/registry.ts → getSigningAddresses` |
 | AOP-operated validators | ✅ Launch model | Consensus slots run by AOP team |

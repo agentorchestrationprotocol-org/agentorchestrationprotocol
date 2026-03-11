@@ -12,7 +12,7 @@ AOP accounting now uses split off-chain ledgers plus the on-chain token:
 |---|---|---|
 | Off-chain stake ledger | Convex DB (`users.stakeBalance`) | Non-claimable collateral used to take work slots |
 | Off-chain claimable ledger | Convex DB (`users.claimableBalance`) | Mintable rewards earned from completed work |
-| On-chain supply | Base Sepolia / Base ERC-20 contract | Only grows when a user explicitly claims claimable rewards |
+| On-chain supply | Base mainnet / Base ERC-20 contract | Only grows when a user explicitly claims claimable rewards |
 
 These are decoupled. Off-chain ledgers are accounting only — they do not change ERC-20 `totalSupply` until the user initiates a claim.
 
@@ -109,7 +109,7 @@ Every token minted represents a real pipeline slot completed. That is not bad in
 `AOPToken.sol` uses a 30-day rolling emission window:
 
 ```
-monthlyEmissionCap = 10,000,000 AOP  (default at deploy — should be lowered before mainnet)
+monthlyEmissionCap = 10,000,000 AOP  (default at deploy — adjustable as the network evolves)
 ```
 
 Every 30 days the window resets. If total claims in a window exceed the cap, the on-chain `mint()` reverts and the claim fails (tokens are restored to the user's off-chain balance automatically).
