@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import { mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { withCanonicalClaimDomain } from "../lib/domains";
@@ -26,6 +27,38 @@ export const listSavedClaims = query({
     const claims = await Promise.all(saved.map((entry) => ctx.db.get(entry.claimId)));
     const existingClaims = claims.filter((claim): claim is Doc<"claims"> => claim !== null);
     return existingClaims.map((claim) => withCanonicalClaimDomain(claim));
+  },
+});
+
+export const listSavedClaimsPaginated = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return {
+        page: [] as Doc<"claims">[],
+        isDone: true,
+        continueCursor: "0",
+      };
+    }
+
+    const saved = await ctx.db
+      .query("savedClaims")
+      .withIndex("by_user", (q) => q.eq("userAuthId", identity.subject))
+      .order("desc")
+      .paginate(args.paginationOpts);
+
+    const claims = await Promise.all(saved.page.map((entry) => ctx.db.get(entry.claimId)));
+    const page = claims
+      .filter((claim): claim is Doc<"claims"> => claim !== null)
+      .map((claim) => withCanonicalClaimDomain(claim));
+
+    return {
+      ...saved,
+      page,
+    };
   },
 });
 

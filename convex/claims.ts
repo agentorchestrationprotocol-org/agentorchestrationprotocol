@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
@@ -32,14 +33,50 @@ const SEARCH_CANDIDATE_LIMIT = 300;
 const DEFAULT_MODERATION_LIMIT = 100;
 const MAX_MODERATION_LIMIT = 200;
 const AGENT_DUPLICATE_CLAIM_WINDOW_MS = 30_000;
-const DOMAIN_BACKFILL_DEFAULT_LIMIT = 250;
-const DOMAIN_BACKFILL_MAX_LIMIT = 500;
 
 const filterVisibleClaims = <T extends { isHidden?: boolean }>(claims: T[]) =>
   claims.filter((claim) => !claim.isHidden);
 
 const canonicalizeClaim = <T extends Doc<"claims">>(claim: T): T =>
   withCanonicalClaimDomain(claim);
+
+const sortClaims = <T extends { voteCount: number; commentCount: number; createdAt: number }>(
+  claims: T[],
+  sort: "latest" | "top"
+) => {
+  if (sort === "top") {
+    return [...claims].sort((a, b) => {
+      if (b.voteCount !== a.voteCount) return b.voteCount - a.voteCount;
+      if (b.commentCount !== a.commentCount) return b.commentCount - a.commentCount;
+      return b.createdAt - a.createdAt;
+    });
+  }
+
+  return [...claims].sort((a, b) => b.createdAt - a.createdAt);
+};
+
+const decodeCursorOffset = (cursor: string | null): number => {
+  if (cursor === null) return 0;
+  const parsed = Number(cursor);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new Error("Invalid cursor");
+  }
+  return parsed;
+};
+
+const paginateArray = <T>(
+  items: T[],
+  paginationOpts: { cursor: string | null; numItems: number }
+) => {
+  const start = decodeCursorOffset(paginationOpts.cursor);
+  const end = Math.min(items.length, start + paginationOpts.numItems);
+  const page = items.slice(start, end);
+  return {
+    page,
+    isDone: end >= items.length,
+    continueCursor: String(end),
+  };
+};
 
 const dedupeClaims = <T extends { _id: string; createdAt: number }>(claims: T[]) => {
   const unique = new Map<string, T>();
@@ -142,6 +179,43 @@ export const listClaims = query({
       .order("desc")
       .take(fetchLimit);
     return filterVisibleClaims(rows).map(canonicalizeClaim).slice(0, limit);
+  },
+});
+
+export const listLatestClaimsPaginated = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const result = await ctx.db
+      .query("claims")
+      .withIndex("by_createdAt")
+      .order("desc")
+      .filter((q) => q.neq(q.field("isHidden"), true))
+      .paginate(args.paginationOpts);
+
+    return {
+      ...result,
+      page: result.page.map(canonicalizeClaim),
+    };
+  },
+});
+
+export const listTopClaimsPaginated = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const candidates = filterVisibleClaims(
+      await ctx.db
+        .query("claims")
+        .withIndex("by_createdAt")
+        .order("desc")
+        .take(MAX_LIMIT)
+    ).map(canonicalizeClaim);
+
+    const sorted = sortClaims(candidates, "top");
+    return paginateArray(sorted, args.paginationOpts);
   },
 });
 
@@ -327,6 +401,79 @@ export const searchClaims = query({
       .map(({ claim }) => canonicalizeClaim(claim));
 
     return ranked;
+  },
+});
+
+export const searchClaimsPaginated = query({
+  args: {
+    query: v.string(),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const normalizedQuery = args.query.trim().toLowerCase();
+    if (!normalizedQuery) {
+      return {
+        page: [] as Doc<"claims">[],
+        isDone: true,
+        continueCursor: "0",
+      };
+    }
+
+    const terms = normalizedQuery.split(/\s+/).filter(Boolean);
+    if (terms.length === 0) {
+      return {
+        page: [] as Doc<"claims">[],
+        isDone: true,
+        continueCursor: "0",
+      };
+    }
+
+    const now = Date.now();
+    const candidates = await ctx.db
+      .query("claims")
+      .withIndex("by_createdAt")
+      .order("desc")
+      .take(SEARCH_CANDIDATE_LIMIT);
+
+    const ranked = candidates
+      .filter((claim) => !claim.isHidden)
+      .map((claim) => {
+        const title = claim.title.toLowerCase();
+        const body = claim.body.toLowerCase();
+        const protocol = (claim.protocol ?? "").toLowerCase();
+        const domain = canonicalizeClaimDomain(claim.domain).toLowerCase();
+        const haystack = `${title}\n${protocol}\n${domain}\n${body}`;
+
+        if (!terms.every((term) => haystack.includes(term))) {
+          return null;
+        }
+
+        let score = 0;
+        for (const term of terms) {
+          if (title.includes(term)) score += 8;
+          if (protocol.includes(term)) score += 5;
+          if (domain.includes(term)) score += 4;
+          if (body.includes(term)) score += 2;
+        }
+
+        score += Math.max(0, claim.voteCount ?? 0) * 0.18;
+        score += Math.max(0, claim.commentCount ?? 0) * 0.1;
+
+        const ageHours = Math.max(0, (now - claim.createdAt) / MS_PER_HOUR);
+        score += Math.max(0, 48 - ageHours) * 0.03;
+
+        return { claim: canonicalizeClaim(claim), score };
+      })
+      .filter((item): item is { claim: Doc<"claims">; score: number } => item !== null)
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        if (b.claim.voteCount !== a.claim.voteCount) return b.claim.voteCount - a.claim.voteCount;
+        if (b.claim.commentCount !== a.claim.commentCount) return b.claim.commentCount - a.claim.commentCount;
+        return b.claim.createdAt - a.claim.createdAt;
+      })
+      .map(({ claim }) => claim);
+
+    return paginateArray(ranked, args.paginationOpts);
   },
 });
 

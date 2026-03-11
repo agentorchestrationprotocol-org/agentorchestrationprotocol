@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
-  Authenticated,
   AuthLoading,
   Unauthenticated,
+  usePaginatedQuery,
   useMutation,
   useQuery,
 } from "convex/react";
@@ -306,23 +306,40 @@ export default function Home() {
 }
 
 function HomePageContent() {
-  const claims = useQuery(api.claims.listClaims, { limit: 20 });
-  const savedClaims = useQuery(api.saved.listSavedClaims, { limit: 20 });
-  const trendingClaims = useQuery(api.claims.listTrendingClaims, { limit: 5 });
   const searchParams = useSearchParams();
   const searchQuery = searchParams.get("q")?.trim() ?? "";
   const [activeFeed, setActiveFeed] = useState("Home");
   const hasSearchQuery = searchQuery.length > 0;
-  const searchedClaims = useQuery(
-    api.claims.searchClaims,
-    hasSearchQuery ? { query: searchQuery, limit: 20 } : "skip"
+  const latestFeed = usePaginatedQuery(
+    api.claims.listLatestClaimsPaginated,
+    !hasSearchQuery && activeFeed !== "Popular" && activeFeed !== "Saved" ? {} : "skip",
+    { initialNumItems: 20 }
   );
-  const visibleClaims =
+  const popularFeed = usePaginatedQuery(
+    api.claims.listTopClaimsPaginated,
+    !hasSearchQuery && activeFeed === "Popular" ? {} : "skip",
+    { initialNumItems: 20 }
+  );
+  const savedFeed = usePaginatedQuery(
+    api.saved.listSavedClaimsPaginated,
+    !hasSearchQuery && activeFeed === "Saved" ? {} : "skip",
+    { initialNumItems: 20 }
+  );
+  const searchFeed = usePaginatedQuery(
+    api.claims.searchClaimsPaginated,
+    hasSearchQuery ? { query: searchQuery } : "skip",
+    { initialNumItems: 20 }
+  );
+  const trendingClaims = useQuery(api.claims.listTrendingClaims, { limit: 5 });
+  const activePagination =
     hasSearchQuery
-      ? searchedClaims ?? []
+      ? searchFeed
       : activeFeed === "Saved"
-        ? savedClaims ?? []
-        : claims ?? [];
+        ? savedFeed
+        : activeFeed === "Popular"
+          ? popularFeed
+          : latestFeed;
+  const visibleClaims = activePagination.results;
   const blogAvailability = useQuery(api.blogs.listAvailability, {
     claimIds: visibleClaims.map((claim) => claim._id),
   });
@@ -333,7 +350,7 @@ function HomePageContent() {
   );
 
   useEffect(() => {
-    if (claims !== undefined) {
+    if (activePagination.status !== "LoadingFirstPage") {
       const resetId = window.setTimeout(() => {
         setClaimsLoadTimedOut(false);
       }, 0);
@@ -345,9 +362,13 @@ function HomePageContent() {
     }, 10000);
 
     return () => window.clearTimeout(timeoutId);
-  }, [claims]);
+  }, [activePagination.status, activeFeed, searchQuery]);
 
-  const showHero = (!loading && !user) || (claims !== undefined && claims.length === 0);
+  const showHero =
+    (!loading && !user) ||
+    (!hasSearchQuery &&
+      latestFeed.status !== "LoadingFirstPage" &&
+      latestFeed.results.length === 0);
 
   return (
     <>
@@ -379,59 +400,20 @@ function HomePageContent() {
               <MobileDomainSelector />
             </div>
 
-            {hasSearchQuery ? (
-              searchedClaims === undefined ? (
-                <div className="surface-card p-6 animate-fade-in">
-                  <p className="text-sm text-[var(--muted)]">Searching claims...</p>
-                </div>
-              ) : searchedClaims.length === 0 ? (
-                <div className="surface-card p-6">
-                  <p className="text-sm text-[var(--muted)]">No results for “{searchQuery}”.</p>
-                </div>
-              ) : (
-                searchedClaims.map((claim, index) => (
-                  <ClaimCard
-                    key={claim._id}
-                    claim={claim}
-                    index={index}
-                    hasBlog={blogAvailabilityMap.get(String(claim._id)) ?? false}
-                  />
-                ))
-              )
-            ) : activeFeed === "Saved" ? (
-              <>
-                <Authenticated>
-                  {savedClaims === undefined ? (
-                    <div className="surface-card p-6 animate-fade-in">
-                      <p className="text-sm text-[var(--muted)]">Loading saved claims...</p>
-                    </div>
-                  ) : savedClaims.length === 0 ? (
-                    <div className="surface-card p-6">
-                      <p className="text-sm text-[var(--muted)]">No saved claims yet.</p>
-                    </div>
-                  ) : (
-                    savedClaims.map((claim, index) => (
-                      <ClaimCard
-                        key={claim._id}
-                        claim={claim}
-                        index={index}
-                        hasBlog={blogAvailabilityMap.get(String(claim._id)) ?? false}
-                      />
-                    ))
-                  )}
-                </Authenticated>
-                <Unauthenticated>
-                  <div className="surface-card p-6">
-                    <p className="text-sm text-[var(--muted)]">Sign in to view saved claims.</p>
-                  </div>
-                </Unauthenticated>
-              </>
-            ) : claims === undefined ? (
+            {activeFeed === "Saved" && !hasSearchQuery && !loading && !user ? (
+              <div className="surface-card p-6">
+                <p className="text-sm text-[var(--muted)]">Sign in to view saved claims.</p>
+              </div>
+            ) : activePagination.status === "LoadingFirstPage" ? (
               <div className="surface-card p-6 animate-fade-in">
                 <p className="text-sm text-[var(--muted)]">
                   {claimsLoadTimedOut
                     ? "Still loading claims. Check connection and retry."
-                    : "Loading claims..."}
+                    : hasSearchQuery
+                      ? "Searching claims..."
+                      : activeFeed === "Saved"
+                        ? "Loading saved claims..."
+                        : "Loading claims..."}
                 </p>
                 {claimsLoadTimedOut && (
                   <button
@@ -443,43 +425,68 @@ function HomePageContent() {
                   </button>
                 )}
               </div>
-            ) : claims.length === 0 ? (
-              <div className="surface-card p-8 text-center flex flex-col items-center justify-center min-h-[300px] border border-white/5">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-500/10 mb-4">
-                  <svg className="h-6 w-6 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                  </svg>
+            ) : visibleClaims.length === 0 ? (
+              hasSearchQuery ? (
+                <div className="surface-card p-6">
+                  <p className="text-sm text-[var(--muted)]">No results for “{searchQuery}”.</p>
                 </div>
-                <h3 className="text-lg font-semibold text-[var(--ink)] mb-2">The protocol is live</h3>
-                <p className="text-sm text-[var(--muted)] max-w-md mx-auto mb-6">
-                  No claims have been submitted yet. Be the first to start the deliberation engine and put the AI agents to work.
-                </p>
-                <Link
-                  href="/create"
-                  className="inline-flex h-10 items-center gap-2 rounded-full bg-white px-6 text-sm font-bold text-black transition-transform hover:scale-105"
-                >
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 5v14M5 12h14" />
-                  </svg>
-                  Submit first claim
-                </Link>
-                <div className="mt-8 pt-6 border-t border-white/10 w-full max-w-md text-left">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-[var(--muted)] mb-3">Or run an agent</p>
-                  <div className="bg-[#090f18] border border-white/10 rounded-lg p-3 font-mono text-xs text-blue-300">
-                    <p>npm i -g @agentorchestrationprotocol/cli</p>
-                    <p className="mt-1">aop run --engine claude</p>
+              ) : activeFeed === "Saved" ? (
+                <div className="surface-card p-6">
+                  <p className="text-sm text-[var(--muted)]">No saved claims yet.</p>
+                </div>
+              ) : (
+                <div className="surface-card p-8 text-center flex flex-col items-center justify-center min-h-[300px] border border-white/5">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-500/10 mb-4">
+                    <svg className="h-6 w-6 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-semibold text-[var(--ink)] mb-2">The protocol is live</h3>
+                  <p className="text-sm text-[var(--muted)] max-w-md mx-auto mb-6">
+                    No claims have been submitted yet. Be the first to start the deliberation engine and put the AI agents to work.
+                  </p>
+                  <Link
+                    href="/create"
+                    className="inline-flex h-10 items-center gap-2 rounded-full bg-white px-6 text-sm font-bold text-black transition-transform hover:scale-105"
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
+                    Submit first claim
+                  </Link>
+                  <div className="mt-8 pt-6 border-t border-white/10 w-full max-w-md text-left">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-[var(--muted)] mb-3">Or run an agent</p>
+                    <div className="bg-[#090f18] border border-white/10 rounded-lg p-3 font-mono text-xs text-blue-300">
+                      <p>npm i -g @agentorchestrationprotocol/cli</p>
+                      <p className="mt-1">aop run --engine claude</p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )
             ) : (
-              claims.map((claim, index) => (
-                <ClaimCard
-                  key={claim._id}
-                  claim={claim}
-                  index={index}
-                  hasBlog={blogAvailabilityMap.get(String(claim._id)) ?? false}
-                />
-              ))
+              <>
+                {visibleClaims.map((claim, index) => (
+                  <ClaimCard
+                    key={claim._id}
+                    claim={claim}
+                    index={index}
+                    hasBlog={blogAvailabilityMap.get(String(claim._id)) ?? false}
+                  />
+                ))}
+                {(activePagination.status === "CanLoadMore" ||
+                  activePagination.status === "LoadingMore") && (
+                  <div className="flex justify-center pt-2">
+                    <button
+                      type="button"
+                      onClick={() => activePagination.loadMore(20)}
+                      disabled={activePagination.status === "LoadingMore"}
+                      className="chip text-[var(--ink)] disabled:cursor-wait disabled:opacity-60"
+                    >
+                      {activePagination.status === "LoadingMore" ? "Loading more..." : "Load more"}
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </section>
 
