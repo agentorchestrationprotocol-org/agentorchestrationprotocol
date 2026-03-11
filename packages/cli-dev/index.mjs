@@ -423,6 +423,23 @@ async function resolveApiAccess({ apiBaseUrlOverride } = {}) {
   return { apiKey, apiBase };
 }
 
+async function fetchCurrentBlogJob(apiBase, apiKey) {
+  try {
+    const res = await fetch(`${apiBase}/api/v1/jobs/blog/current`, {
+      headers: { authorization: `Bearer ${apiKey}` },
+    });
+
+    if (!res.ok) {
+      return null;
+    }
+
+    const payload = await res.json().catch(() => null);
+    return payload?.job ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function runBlogEngineWithPublishWatch({
   bin,
   engineArgs,
@@ -460,33 +477,59 @@ async function runBlogEngineWithPublishWatch({
       child.kill("SIGKILL");
     };
 
+    const observeCurrentJob = async () => {
+      const job = await fetchCurrentBlogJob(apiBase, apiKey);
+      if (!job) return null;
+
+      const activityAt =
+        job.takenAt ?? job.publishedAt ?? job.updatedAt ?? job.createdAt ?? 0;
+      if (activityAt >= startedAt - pollIntervalMs) {
+        seenJobId = seenJobId ?? job._id;
+      }
+
+      if (!seenJobId || job._id !== seenJobId) {
+        return null;
+      }
+
+      return job;
+    };
+
+    const settleFromChildExit = async (status, signal) => {
+      if (signal) {
+        finish({ status: status ?? 0, signal });
+        return;
+      }
+
+      const exitCode = status ?? 0;
+      if (exitCode !== 0) {
+        finish({ status: exitCode, signal: null });
+        return;
+      }
+
+      const job = await observeCurrentJob();
+      if (job?.status === "published") {
+        finish({ status: 0, signal: null, publishedConfirmed: true });
+        return;
+      }
+
+      if (job?.status === "stale") {
+        finish({ status: 3, signal: null });
+        return;
+      }
+
+      finish({ status: 5, signal: null, missingPublishConfirmation: true });
+    };
+
     child.on("error", (error) => finish({ error }));
-    child.on("exit", (status, signal) => finish({ status: status ?? 0, signal }));
+    child.on("exit", (status, signal) => {
+      void settleFromChildExit(status, signal);
+    });
 
     pollTimer = setInterval(async () => {
       if (settled) return;
       try {
-        const res = await fetch(`${apiBase}/api/v1/jobs/blog/current`, {
-          headers: { authorization: `Bearer ${apiKey}` },
-        });
-
-        if (!res.ok) {
-          return;
-        }
-
-        const payload = await res.json().catch(() => null);
-        const job = payload?.job;
+        const job = await observeCurrentJob();
         if (!job) return;
-
-        const activityAt =
-          job.takenAt ?? job.publishedAt ?? job.updatedAt ?? job.createdAt ?? 0;
-        if (activityAt >= startedAt - pollIntervalMs) {
-          seenJobId = seenJobId ?? job._id;
-        }
-
-        if (!seenJobId || job._id !== seenJobId) {
-          return;
-        }
 
         if (job.status === "published") {
           await stopChild();
@@ -718,7 +761,8 @@ async function runPipelineAgent({ flags }) {
     );
     let orchestration = await readFile(orchestrationPath, "utf8");
     orchestration = orchestration
-      .replace("node scripts/agent-loop.mjs", `node ${agentLoopPath}`)
+      .split("node scripts/agent-loop.mjs")
+      .join(`node ${agentLoopPath}`)
       .replace("FETCH_ARGS_PLACEHOLDER", fetchArgs);
     return orchestration;
   };
@@ -912,10 +956,13 @@ async function runPipelineAgent({ flags }) {
           env: spawnEnv,
         });
 
-    const releaseStaleSlot = async () => {
-      if (activeWorkKind === "blog") return;
+    const releaseCurrentWork = async () => {
       try {
-        await fetch(`${spawnEnv.AOP_BASE_URL}/api/v1/slots/release-stale`, {
+        const releasePath =
+          activeWorkKind === "blog"
+            ? `${spawnEnv.AOP_BASE_URL}/api/v1/jobs/blog/release-current`
+            : `${spawnEnv.AOP_BASE_URL}/api/v1/slots/release-stale`;
+        await fetch(releasePath, {
           method: "POST",
           headers: { Authorization: `Bearer ${apiKey}` },
         });
@@ -924,13 +971,13 @@ async function runPipelineAgent({ flags }) {
 
     if (result.error) {
       console.error(`\n  ❌ Failed to run ${providerName}: ${result.error.message}\n`);
-      await releaseStaleSlot();
+      await releaseCurrentWork();
       process.exit(1);
     }
 
     // Ctrl+C or killed by signal — exit cleanly
     if (result.signal) {
-      await releaseStaleSlot();
+      await releaseCurrentWork();
       console.log(`\n  👋 ${c.dim}Stopped.${c.reset}\n`);
       process.exit(0);
     }
@@ -938,14 +985,20 @@ async function runPipelineAgent({ flags }) {
     const exitCode = result.status ?? 0;
 
     if (!autoMode) {
-      if (exitCode !== 0) await releaseStaleSlot();
+      if (exitCode !== 0) await releaseCurrentWork();
       process.exit(exitCode);
     }
 
     // Hard error — stop
     if (exitCode === 1) {
-      await releaseStaleSlot();
+      await releaseCurrentWork();
       console.log(`\n  ❌ Agent exited with an error — stopping.\n`);
+      process.exit(1);
+    }
+
+    if (exitCode === 5) {
+      await releaseCurrentWork();
+      console.log(`\n  ❌ Blog agent exited without a published article — released the current job and stopped.\n`);
       process.exit(1);
     }
 

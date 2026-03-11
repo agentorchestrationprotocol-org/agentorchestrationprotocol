@@ -45,6 +45,43 @@ const parseLimit = (value: string | null) => {
   return Math.min(parsed, 500);
 };
 
+const BLOG_RECOMMENDATION_VALUES = [
+  "accept",
+  "accept-with-caveats",
+  "reject",
+  "needs-more-evidence",
+] as const;
+
+type BlogRecommendationValue = (typeof BLOG_RECOMMENDATION_VALUES)[number];
+
+const parseBlogRecommendationInput = (
+  rawValue: unknown
+): { ok: true; value: BlogRecommendationValue | undefined } | { ok: false } => {
+  if (rawValue === undefined || rawValue === null) {
+    return { ok: true, value: undefined };
+  }
+
+  if (typeof rawValue !== "string") {
+    return { ok: false };
+  }
+
+  const normalized = rawValue.trim().toLowerCase();
+  if (!normalized || normalized === "none" || normalized === "null") {
+    return { ok: true, value: undefined };
+  }
+
+  if (
+    BLOG_RECOMMENDATION_VALUES.includes(normalized as BlogRecommendationValue)
+  ) {
+    return {
+      ok: true,
+      value: normalized as BlogRecommendationValue,
+    };
+  }
+
+  return { ok: false };
+};
+
 const hasJsonContentType = (request: Request) => {
   const contentType = request.headers.get("content-type");
   return !!contentType && contentType.toLowerCase().includes("application/json");
@@ -885,6 +922,34 @@ http.route({
       }
     }
 
+    if (pathname === "/api/v1/jobs/blog/release-current") {
+      try {
+        const result = await ctx.runMutation(
+          internalAny.blogJobs.releaseCurrentTakenJob,
+          {
+            apiKeyId: auth.apiKey.apiKeyId as Id<"apiKeys">,
+          }
+        );
+
+        if (!result) {
+          return error(
+            404,
+            "No taken blog job for this API key",
+            "no_current_blog_job"
+          );
+        }
+
+        return json(result);
+      } catch (rawError: any) {
+        const message = rawError?.message ?? "";
+        return error(
+          400,
+          message || "Failed to release current blog job",
+          "blog_job_release_failed"
+        );
+      }
+    }
+
     const submitMatch = pathname.match(/^\/api\/v1\/jobs\/blog\/([^/]+)\/submit$/);
     if (submitMatch) {
       const jobId = decodePathSegment(submitMatch[1]);
@@ -895,25 +960,23 @@ http.route({
       const title = typeof payload?.title === "string" ? payload.title.trim() : "";
       const dek = typeof payload?.dek === "string" ? payload.dek.trim() : "";
       const excerpt = typeof payload?.excerpt === "string" ? payload.excerpt.trim() : "";
-      const recommendation =
-        typeof payload?.recommendation === "string" ? payload.recommendation.trim() : "";
+      const parsedRecommendation = parseBlogRecommendationInput(
+        payload?.recommendation
+      );
       const confidence =
         typeof payload?.confidence === "number" ? payload.confidence : null;
       const bodyMarkdown =
         typeof payload?.bodyMarkdown === "string" ? payload.bodyMarkdown : "";
 
-      const validRecommendations = [
-        "accept",
-        "accept-with-caveats",
-        "reject",
-        "needs-more-evidence",
-      ];
-
       if (!title || !dek || !excerpt || !bodyMarkdown) {
         return error(400, "Missing blog fields", "invalid_payload");
       }
-      if (!validRecommendations.includes(recommendation)) {
-        return error(400, "Invalid recommendation", "invalid_payload");
+      if (!parsedRecommendation.ok) {
+        return error(
+          400,
+          "Invalid recommendation. Use accept, accept-with-caveats, reject, needs-more-evidence, or none.",
+          "invalid_payload"
+        );
       }
       if (confidence === null || !Number.isFinite(confidence)) {
         return error(400, "confidence must be a number", "invalid_payload");
@@ -926,11 +989,9 @@ http.route({
           title,
           dek,
           excerpt,
-          recommendation: recommendation as
-            | "accept"
-            | "accept-with-caveats"
-            | "reject"
-            | "needs-more-evidence",
+          ...(parsedRecommendation.value
+            ? { recommendation: parsedRecommendation.value }
+            : {}),
           confidence,
           bodyMarkdown,
         });

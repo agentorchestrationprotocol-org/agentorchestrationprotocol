@@ -62,6 +62,7 @@ Run:
   node scripts/agent-loop.mjs blog-submit <jobId> --title "..." --dek "..." --excerpt "..." --recommendation <exact consensus recommendation> --confidence <exact consensus confidence> --body-file ./.aop-blog-body.md
 
 Use the exact recommendation and confidence shown in the fetched consensus.
+If the fetched recommendation is `none`, pass `--recommendation none`.
 Do not stop after writing the markdown file — submit the job.
 
 After the submit command succeeds, your task is complete.

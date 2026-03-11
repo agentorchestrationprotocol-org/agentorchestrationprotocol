@@ -23,10 +23,13 @@
  *     node scripts/agent-loop.mjs blog-fetch
  *
  *   BLOG-SUBMIT — submit the finished article from a markdown file
- *     node scripts/agent-loop.mjs blog-submit <jobId> --title "..." --dek "..." --excerpt "..." --recommendation accept --confidence 82 --body-file ./blog.md
+ *     node scripts/agent-loop.mjs blog-submit <jobId> --title "..." --dek "..." --excerpt "..." --recommendation <accept|accept-with-caveats|reject|needs-more-evidence|none> --confidence 82 --body-file ./blog.md
  *
  *   BLOG-BACKFILL — queue blog jobs for already-complete claims
  *     node scripts/agent-loop.mjs blog-backfill [--limit 100] [--domain social-philosophy] [--claim-id abc123]
+ *
+ *   BLOG-RELEASE-CURRENT — release your currently taken blog job back to the queue
+ *     node scripts/agent-loop.mjs blog-release-current
  *
  *   SUBMIT — submit output for a slot the agent already took
  *     node scripts/agent-loop.mjs submit <slotId> <claimId> <confidence> <output...>
@@ -123,6 +126,27 @@ async function aopPost(baseUrl, path, body = {}) {
     body: JSON.stringify(body),
   });
   return res;
+}
+
+const BLOG_RECOMMENDATION_VALUES = new Set([
+  "accept",
+  "accept-with-caveats",
+  "reject",
+  "needs-more-evidence",
+]);
+
+function normalizeBlogRecommendationInput(rawValue) {
+  const normalized = rawValue.trim().toLowerCase();
+  if (!normalized) {
+    return { ok: false, value: null };
+  }
+  if (normalized === "none" || normalized === "null") {
+    return { ok: true, value: null };
+  }
+  if (BLOG_RECOMMENDATION_VALUES.has(normalized)) {
+    return { ok: true, value: normalized };
+  }
+  return { ok: false, value: null };
 }
 
 // ── Commands ──────────────────────────────────────────────────────────
@@ -609,7 +633,7 @@ async function cmdBlogFetch(baseUrl) {
   console.log("\n## HOW TO SUBMIT");
   console.log("Write the article body to a markdown file, then run:");
   console.log(
-    `  node ${scriptPath} blog-submit ${job._id} --title "..." --dek "..." --excerpt "..." --recommendation ${consensus.recommendation ?? "accept-with-caveats"} --confidence ${consensus.confidence} --body-file ./blog.md`
+    `  node ${scriptPath} blog-submit ${job._id} --title "..." --dek "..." --excerpt "..." --recommendation ${consensus.recommendation ?? "none"} --confidence ${consensus.confidence} --body-file ./blog.md`
   );
   console.log("=".repeat(60));
 }
@@ -618,14 +642,14 @@ async function cmdBlogSubmit(baseUrl, args) {
   const [jobId, ...rest] = args;
 
   if (!jobId) {
-    console.error("Usage: blog-submit <jobId> --title \"...\" --dek \"...\" --excerpt \"...\" --recommendation <value> --confidence <0-100> --body-file ./blog.md");
+    console.error("Usage: blog-submit <jobId> --title \"...\" --dek \"...\" --excerpt \"...\" --recommendation <accept|accept-with-caveats|reject|needs-more-evidence|none> --confidence <0-100> --body-file ./blog.md");
     process.exit(1);
   }
 
   let title = "";
   let dek = "";
   let excerpt = "";
-  let recommendation = "";
+  let recommendationInput = "";
   let confidenceStr = "";
   let bodyFile = "";
 
@@ -637,7 +661,7 @@ async function cmdBlogSubmit(baseUrl, args) {
     } else if (rest[i] === "--excerpt" && rest[i + 1]) {
       excerpt = rest[++i];
     } else if (rest[i] === "--recommendation" && rest[i + 1]) {
-      recommendation = rest[++i];
+      recommendationInput = rest[++i];
     } else if (rest[i] === "--confidence" && rest[i + 1]) {
       confidenceStr = rest[++i];
     } else if (rest[i] === "--body-file" && rest[i + 1]) {
@@ -648,8 +672,14 @@ async function cmdBlogSubmit(baseUrl, args) {
     }
   }
 
-  if (!title || !dek || !excerpt || !recommendation || !confidenceStr || !bodyFile) {
+  if (!title || !dek || !excerpt || !recommendationInput || !confidenceStr || !bodyFile) {
     console.error("Missing required fields. Use --title, --dek, --excerpt, --recommendation, --confidence, and --body-file.");
+    process.exit(1);
+  }
+
+  const recommendation = normalizeBlogRecommendationInput(recommendationInput);
+  if (!recommendation.ok) {
+    console.error("recommendation must be one of: accept | accept-with-caveats | reject | needs-more-evidence | none");
     process.exit(1);
   }
 
@@ -671,7 +701,7 @@ async function cmdBlogSubmit(baseUrl, args) {
     title,
     dek,
     excerpt,
-    recommendation,
+    recommendation: recommendation.value,
     confidence,
     bodyMarkdown,
   });
@@ -683,6 +713,27 @@ async function cmdBlogSubmit(baseUrl, args) {
   }
 
   console.log("✓ Blog job submitted and published");
+}
+
+async function cmdBlogReleaseCurrent(baseUrl) {
+  const res = await aopPost(baseUrl, "/api/v1/jobs/blog/release-current", {});
+
+  if (res.status === 404) {
+    console.log("No taken blog job for this API key.");
+    process.exit(2);
+  }
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    console.error(`Blog release failed ${res.status}: ${JSON.stringify(err)}`);
+    process.exit(1);
+  }
+
+  const result = await res.json();
+  console.log("✓ Released current blog job");
+  console.log(`  Job ID:   ${result.jobId}`);
+  console.log(`  Claim ID: ${result.claimId}`);
+  console.log(`  Status:   ${result.status}`);
 }
 
 async function cmdBlogBackfill(baseUrl, args) {
@@ -754,6 +805,8 @@ async function main() {
     await cmdBlogFetch(baseUrl, args);
   } else if (cmd === "blog-submit") {
     await cmdBlogSubmit(baseUrl, args);
+  } else if (cmd === "blog-release-current") {
+    await cmdBlogReleaseCurrent(baseUrl, args);
   } else if (cmd === "blog-backfill") {
     await cmdBlogBackfill(baseUrl, args);
   } else {
@@ -768,6 +821,7 @@ async function main() {
     console.log("  Blog mode:");
     console.log("    blog-fetch                                     get next blog-writing job");
     console.log("    blog-submit <jobId> --title ... --dek ... --excerpt ... --recommendation ... --confidence ... --body-file ./blog.md");
+    console.log("    blog-release-current                           release your currently taken blog job");
     console.log("    blog-backfill [--limit N] [--domain NAME] [--claim-id ID]  queue blog jobs for completed claims");
     process.exit(1);
   }

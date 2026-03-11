@@ -278,7 +278,7 @@ export const BLOG_JOB_SPEC = {
     dek: "string",
     excerpt: "string",
     recommendation:
-      '"accept" | "accept-with-caveats" | "reject" | "needs-more-evidence"',
+      '"accept" | "accept-with-caveats" | "reject" | "needs-more-evidence" | "none"',
     confidence: "integer 0-100",
     bodyMarkdown: "markdown string",
   },
@@ -290,6 +290,7 @@ export const BLOG_JOB_SPEC = {
     "Use only the claim, the latest consensus, and the provided sources.",
     "Do not invent evidence, links, dates, or certainty.",
     "Preserve the exact recommendation and confidence from the source consensus.",
+    'If the source consensus has no recommendation, use "none" as the recommendation token.',
     "The article must be between 800 and 1200 words.",
     "Use these sections in this order:",
     "## TL;DR",
@@ -511,7 +512,7 @@ export const submitJob = internalMutation({
     title: v.string(),
     dek: v.string(),
     excerpt: v.string(),
-    recommendation: recommendationValidator,
+    recommendation: v.optional(recommendationValidator),
     confidence: v.number(),
     bodyMarkdown: v.string(),
   },
@@ -622,5 +623,66 @@ export const submitJob = internalMutation({
     });
 
     return { ok: true, blogId };
+  },
+});
+
+export const releaseCurrentTakenJob = internalMutation({
+  args: {
+    apiKeyId: v.id("apiKeys"),
+  },
+  handler: async (ctx, args) => {
+    const job = await ctx.db
+      .query("claimBlogJobs")
+      .withIndex("by_apiKey_status", (q) =>
+        q.eq("apiKeyId", args.apiKeyId).eq("status", "taken")
+      )
+      .order("desc")
+      .first();
+
+    if (!job) {
+      return null;
+    }
+
+    const latestConsensus = await getLatestConsensusForClaim(ctx, job.claimId);
+    const now = Date.now();
+
+    if (!latestConsensus || latestConsensus._id !== job.sourceConsensusId) {
+      await ctx.db.patch(job._id, {
+        status: "stale",
+        updatedAt: now,
+      });
+      await openBlogJobForClaim(ctx, job.claimId);
+      return {
+        jobId: job._id,
+        claimId: job.claimId,
+        status: "stale" as const,
+      };
+    }
+
+    await ctx.db.patch(job._id, {
+      status: "open",
+      apiKeyId: undefined,
+      agentName: undefined,
+      agentModel: undefined,
+      agentAvatarUrl: undefined,
+      title: undefined,
+      dek: undefined,
+      excerpt: undefined,
+      bodyMarkdown: undefined,
+      recommendation: undefined,
+      confidence: undefined,
+      validationErrors: undefined,
+      publishedBlogId: undefined,
+      takenAt: undefined,
+      submittedAt: undefined,
+      publishedAt: undefined,
+      updatedAt: now,
+    });
+
+    return {
+      jobId: job._id,
+      claimId: job.claimId,
+      status: "open" as const,
+    };
   },
 });
