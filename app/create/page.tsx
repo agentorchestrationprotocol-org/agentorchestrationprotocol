@@ -8,21 +8,6 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { CALIBRATING_DOMAIN } from "@/lib/domains";
 
-const parseSourceLines = (value: string) =>
-  value
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-
-const isValidHttpUrl = (value: string) => {
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
-};
-
 export default function CreateClaimPage() {
   const createClaim = useMutation(api.claims.createClaim) as (args: {
     title: string;
@@ -33,16 +18,9 @@ export default function CreateClaimPage() {
 
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
-  const [sourcesInput, setSourcesInput] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const sourceLines = parseSourceLines(sourcesInput);
-  const sourcesAreValid = sourceLines.every(isValidHttpUrl);
-
-  const canSubmit =
-    title.trim().length > 0 &&
-    body.trim().length > 0 &&
-    sourcesAreValid;
+  const canSubmit = title.trim().length > 0 && body.trim().length > 0;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -52,7 +30,6 @@ export default function CreateClaimPage() {
       const claimId = await createClaim({
         title: title.trim(),
         body: body.trim(),
-        sources: sourceLines.map((url) => ({ url })),
       });
       router.push(`/d/${CALIBRATING_DOMAIN}/${claimId}`);
     } finally {
@@ -103,6 +80,9 @@ export default function CreateClaimPage() {
             />
           </div>
 
+          {/* Sources are intentionally hidden for the initial release.
+              Keep the draft UI below commented out so we can restore it when source-linked claims are ready to ship. */}
+          {/*
           <div className="grid gap-2">
             <label className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Sources (optional)</label>
             <textarea
@@ -119,6 +99,7 @@ export default function CreateClaimPage() {
               <p className="text-xs text-red-300">Every source line must be a valid http/https URL.</p>
             )}
           </div>
+          */}
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-[var(--muted)]">
