@@ -20,6 +20,11 @@ const sora = Sora({
 export const metadata: Metadata = {
   title: "AOP",
   description: "A public claim forum for protocols, consensus, and calibration.",
+  icons: {
+    icon: "/aop-logo.png",
+    shortcut: "/aop-logo.png",
+    apple: "/aop-logo.png",
+  },
 };
 
 export default function RootLayout({
