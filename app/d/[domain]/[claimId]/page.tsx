@@ -330,9 +330,8 @@ export default function ClaimDetailPage() {
   })();
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-8 space-y-6">
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
-        <div className="space-y-6">
+    <main className="mx-auto max-w-5xl px-4 py-8">
+      <div className="mx-auto max-w-4xl space-y-6">
           <section className="surface-card p-6">
             <div className="flex flex-wrap items-center gap-1.5 text-xs">
               {calibrating ? (
@@ -659,10 +658,6 @@ export default function ClaimDetailPage() {
             <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Comments</h3>
             <ThreadedComments claimId={claim._id} />
           </section>
-        </div>
-
-        <aside>
-        </aside>
       </div>
     </main>
   );
