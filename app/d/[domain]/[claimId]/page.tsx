@@ -31,11 +31,6 @@ function formatTimeAgo(timestamp: number): string {
   return `${days}d ago`;
 }
 
-function shortHash(value: string, head = 10, tail = 8): string {
-  if (value.length <= head + tail + 3) return value;
-  return `${value.slice(0, head)}...${value.slice(-tail)}`;
-}
-
 function HumanIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -793,7 +788,7 @@ function ClaimPipelineSection({
   const protocolName = pipelineState.protocol?.name ?? null;
   const onChainClaimHash = keccak256(toBytes(claimId));
   const poiTxHref = pipelineState.poiTxHash ? `https://basescan.org/tx/${pipelineState.poiTxHash}` : null;
-  const pipelineApiHref = `/api/v1/claims/${encodeURIComponent(claimId)}/pipeline`;
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const slotsByLayer = new Map<number, StageSlot[]>();
   for (const s of allSlots) {
@@ -818,6 +813,18 @@ function ClaimPipelineSection({
   };
 
   const { status } = pipelineState;
+
+  const copyValue = async (field: string, value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedField(field);
+      window.setTimeout(() => {
+        setCopiedField((current) => (current === field ? null : current));
+      }, 1600);
+    } catch {
+      setCopiedField(null);
+    }
+  };
 
   return (
     <section className="surface-card p-6 space-y-4">
@@ -882,40 +889,106 @@ function ClaimPipelineSection({
                   href={poiTxHref}
                   target="_blank"
                   rel="noreferrer"
-                  className="btn-secondary inline-flex items-center px-3 py-1.5 text-xs font-semibold"
+                  className="inline-flex items-center gap-2 rounded-full bg-emerald-300 px-4 py-2 text-xs font-semibold text-[#03110d] shadow-[0_12px_30px_rgba(16,185,129,0.22)] transition hover:bg-emerald-200"
                 >
                   View Base tx
+                  <span aria-hidden>↗</span>
                 </a>
               )}
-              <a
-                href={pipelineApiHref}
-                target="_blank"
-                rel="noreferrer"
-                className="btn-ghost inline-flex items-center px-3 py-1.5 text-xs font-semibold"
-              >
-                View pipeline JSON
-              </a>
             </div>
           </div>
 
           <div className="grid gap-3 md:grid-cols-3">
             <div className="rounded-lg bg-black/20 px-3 py-2.5">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Claim ID</p>
-              <p className="mt-1 font-mono text-xs break-all text-[var(--ink-soft)]">{claimId}</p>
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Claim ID</p>
+                <button
+                  type="button"
+                  onClick={() => void copyValue("claimId", claimId)}
+                  className="inline-flex items-center gap-1 rounded-full border border-white/10 px-2 py-1 text-[10px] font-semibold text-[var(--muted)] transition hover:border-white/20 hover:text-[var(--ink-soft)]"
+                >
+                  {copiedField === "claimId" ? (
+                    <>
+                      <svg className="h-3 w-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3.5 8.5 6.5 11.5 12.5 4.5" />
+                      </svg>
+                      Copied
+                    </>
+                  ) : (
+                    <>
+                      <svg className="h-3 w-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="5" y="3" width="8" height="10" rx="1.5" />
+                        <path d="M3 11V5a2 2 0 0 1 2-2" />
+                      </svg>
+                      Copy
+                    </>
+                  )}
+                </button>
+              </div>
+              <p className="mt-2 font-mono text-[11px] leading-relaxed break-all text-[var(--ink-soft)]">{claimId}</p>
             </div>
             <div className="rounded-lg bg-black/20 px-3 py-2.5">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">On-chain claim hash</p>
-              <p className="mt-1 font-mono text-xs break-all text-[var(--ink-soft)]" title={onChainClaimHash}>
-                {shortHash(onChainClaimHash, 16, 10)}
-              </p>
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">On-chain claim hash</p>
+                <button
+                  type="button"
+                  onClick={() => void copyValue("onChainClaimHash", onChainClaimHash)}
+                  className="inline-flex items-center gap-1 rounded-full border border-white/10 px-2 py-1 text-[10px] font-semibold text-[var(--muted)] transition hover:border-white/20 hover:text-[var(--ink-soft)]"
+                >
+                  {copiedField === "onChainClaimHash" ? (
+                    <>
+                      <svg className="h-3 w-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3.5 8.5 6.5 11.5 12.5 4.5" />
+                      </svg>
+                      Copied
+                    </>
+                  ) : (
+                    <>
+                      <svg className="h-3 w-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="5" y="3" width="8" height="10" rx="1.5" />
+                        <path d="M3 11V5a2 2 0 0 1 2-2" />
+                      </svg>
+                      Copy
+                    </>
+                  )}
+                </button>
+              </div>
+              <p className="mt-2 font-mono text-[11px] leading-relaxed break-all text-[var(--ink-soft)]">{onChainClaimHash}</p>
             </div>
             <div className="rounded-lg bg-black/20 px-3 py-2.5">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Output hash</p>
-              <p
-                className="mt-1 font-mono text-xs break-all text-[var(--ink-soft)]"
-                title={pipelineState.poiOutputHash ?? "Pending"}
-              >
-                {pipelineState.poiOutputHash ? shortHash(pipelineState.poiOutputHash, 16, 10) : "Pending"}
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Output hash</p>
+                {pipelineState.poiOutputHash ? (
+                  <button
+                    type="button"
+                    onClick={() => void copyValue("outputHash", pipelineState.poiOutputHash!)}
+                    className="inline-flex items-center gap-1 rounded-full border border-white/10 px-2 py-1 text-[10px] font-semibold text-[var(--muted)] transition hover:border-white/20 hover:text-[var(--ink-soft)]"
+                  >
+                    {copiedField === "outputHash" ? (
+                      <>
+                        <svg className="h-3 w-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M3.5 8.5 6.5 11.5 12.5 4.5" />
+                        </svg>
+                        Copied
+                      </>
+                    ) : (
+                      <>
+                        <svg className="h-3 w-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="5" y="3" width="8" height="10" rx="1.5" />
+                          <path d="M3 11V5a2 2 0 0 1 2-2" />
+                        </svg>
+                        Copy
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  <span className="rounded-full border border-white/10 px-2 py-1 text-[10px] font-semibold text-[var(--muted)]">
+                    Pending
+                  </span>
+                )}
+              </div>
+              <p className="mt-2 font-mono text-[11px] leading-relaxed break-all text-[var(--ink-soft)]">
+                {pipelineState.poiOutputHash ?? "Pending"}
               </p>
             </div>
           </div>
