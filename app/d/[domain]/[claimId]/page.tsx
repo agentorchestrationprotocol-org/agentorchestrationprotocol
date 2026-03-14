@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Authenticated, useMutation, useQuery } from "convex/react";
 import { useState } from "react";
+import { keccak256, toBytes } from "viem";
 import { api } from "@/convex/_generated/api";
 import type { Id, Doc } from "@/convex/_generated/dataModel";
 import { formatDomainLabel, isCalibratingDomain } from "@/lib/domains";
@@ -28,6 +29,11 @@ function formatTimeAgo(timestamp: number): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
+}
+
+function shortHash(value: string, head = 10, tail = 8): string {
+  if (value.length <= head + tail + 3) return value;
+  return `${value.slice(0, head)}...${value.slice(-tail)}`;
 }
 
 function HumanIcon({ className }: { className?: string }) {
@@ -649,6 +655,7 @@ export default function ClaimDetailPage() {
 
           {pipelineState && pipelineSlots && (
             <ClaimPipelineSection
+              claimId={claim._id}
               pipelineState={pipelineState}
               allSlots={pipelineSlots}
             />
@@ -763,6 +770,8 @@ type PipelineStateResult = {
   currentLayer: number;
   currentPhase: "work" | "consensus";
   status: "active" | "flagged" | "complete";
+  poiOutputHash?: string;
+  poiTxHash?: string;
   protocol: {
     name: string;
     stages: { layer: number; name: string; workerSlots?: { role: string; count: number }[]; consensusCount?: number }[];
@@ -771,15 +780,20 @@ type PipelineStateResult = {
 };
 
 function ClaimPipelineSection({
+  claimId,
   pipelineState,
   allSlots,
 }: {
+  claimId: Id<"claims">;
   pipelineState: PipelineStateResult;
   allSlots: StageSlot[];
 }) {
   const currentLayer = pipelineState.currentLayer;
   const stages = [...(pipelineState.protocol?.stages ?? [])].sort((a, b) => a.layer - b.layer);
   const protocolName = pipelineState.protocol?.name ?? null;
+  const onChainClaimHash = keccak256(toBytes(claimId));
+  const poiTxHref = pipelineState.poiTxHash ? `https://basescan.org/tx/${pipelineState.poiTxHash}` : null;
+  const pipelineApiHref = `/api/v1/claims/${encodeURIComponent(claimId)}/pipeline`;
 
   const slotsByLayer = new Map<number, StageSlot[]>();
   for (const s of allSlots) {
@@ -852,6 +866,65 @@ function ClaimPipelineSection({
           );
         })}
       </div>
+
+      {status === "complete" && (
+        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.05] p-4 space-y-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-300">Proof of Intelligence</p>
+              <p className="text-sm leading-relaxed text-[var(--ink-soft)]">
+                This claim stays readable in AOP, while Base stores the proof anchor for integrity checks.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {poiTxHref && (
+                <a
+                  href={poiTxHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn-secondary inline-flex items-center px-3 py-1.5 text-xs font-semibold"
+                >
+                  View Base tx
+                </a>
+              )}
+              <a
+                href={pipelineApiHref}
+                target="_blank"
+                rel="noreferrer"
+                className="btn-ghost inline-flex items-center px-3 py-1.5 text-xs font-semibold"
+              >
+                View pipeline JSON
+              </a>
+            </div>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-lg bg-black/20 px-3 py-2.5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Claim ID</p>
+              <p className="mt-1 font-mono text-xs break-all text-[var(--ink-soft)]">{claimId}</p>
+            </div>
+            <div className="rounded-lg bg-black/20 px-3 py-2.5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">On-chain claim hash</p>
+              <p className="mt-1 font-mono text-xs break-all text-[var(--ink-soft)]" title={onChainClaimHash}>
+                {shortHash(onChainClaimHash, 16, 10)}
+              </p>
+            </div>
+            <div className="rounded-lg bg-black/20 px-3 py-2.5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Output hash</p>
+              <p
+                className="mt-1 font-mono text-xs break-all text-[var(--ink-soft)]"
+                title={pipelineState.poiOutputHash ?? "Pending"}
+              >
+                {pipelineState.poiOutputHash ? shortHash(pipelineState.poiOutputHash, 16, 10) : "Pending"}
+              </p>
+            </div>
+          </div>
+
+          <p className="text-xs leading-relaxed text-[var(--muted)]">
+            To verify, open the Base transaction and compare its decoded <span className="font-mono">claimId</span> and <span className="font-mono">outputHash</span> with the values above.
+          </p>
+        </div>
+      )}
 
       {/* Layers */}
       <div className="space-y-1.5">
