@@ -177,7 +177,7 @@ export const claimTokens = mutation({
 
     const balance = ledgers.claimableBalance;
     if (balance <= 0) throw new ConvexError("No tokens to claim");
-    const MIN_CLAIM = 1000;
+    const MIN_CLAIM = 200;
     if (balance < MIN_CLAIM) {
       throw new ConvexError(
         `Minimum claim is ${MIN_CLAIM} AOP. You have ${balance} AOP — keep earning and claim when you reach ${MIN_CLAIM}.`
