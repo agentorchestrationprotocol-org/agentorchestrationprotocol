@@ -194,6 +194,8 @@ function ProfilePageContent() {
       ? profile.claimableBalance
       : Math.max(0, legacyTokenBalance - stakeBalance);
   const totalEarned = claimableBalance + (profile?.tokenClaimed ?? 0);
+  const MIN_CLAIM = 1000;
+  const isClaimUnderMinimum = claimableBalance > 0 && claimableBalance < MIN_CLAIM;
 
   const moderationQueue = useQuery(
     api.claims.listModerationQueue,
@@ -862,7 +864,7 @@ function ProfilePageContent() {
                   <p className="mt-1 text-xs text-[var(--muted)]">
                     Mints your current claimable rewards on-chain.
                   </p>
-                  {profile?.walletAddress && claimableBalance > 0 && !["pending", "confirming"].includes(profile?.tokenClaimStatus ?? "") ? (
+                  {profile?.walletAddress && claimableBalance > 0 && !["pending", "confirming"].includes(profile?.tokenClaimStatus ?? "") && !isClaimUnderMinimum ? (
                     <button
                       type="button"
                       onClick={() => void handleClaim()}
@@ -873,7 +875,11 @@ function ProfilePageContent() {
                     </button>
                   ) : (
                     <p className="mt-3 text-xs text-[var(--muted)]">
-                      {profile?.walletAddress ? "No claimable rewards available to claim." : "Link wallet to claim."}
+                      {profile?.walletAddress
+                        ? isClaimUnderMinimum
+                          ? `Need at least ${MIN_CLAIM} AOP to claim on-chain.`
+                          : "No claimable rewards available to claim."
+                        : "Link wallet to claim."}
                     </p>
                   )}
                 </div>
@@ -883,6 +889,11 @@ function ProfilePageContent() {
                   <p className="mt-1 text-xs text-[var(--muted)]">
                     Sends AOP from wallet to protocol sink and restores stakeable balance.
                   </p>
+                  {isClaimUnderMinimum && (
+                    <p className="mt-3 text-sm font-semibold text-red-500">
+                      Minimum claim is {MIN_CLAIM} AOP. You have {claimableBalance} AOP, so you can&rsquo;t mint yet.
+                    </p>
+                  )}
                   <div className="mt-3 flex items-center gap-2">
                     <input
                       type="number"
@@ -1083,6 +1094,12 @@ function ProfilePageContent() {
                         <MetaMaskIcon className="h-3.5 w-3.5 fill-white" />
                         {walletBusy ? "Connecting..." : "Connect MetaMask"}
                       </button>
+                      <p className="mt-3 text-xs leading-relaxed text-[var(--muted)]">
+                        Connecting your wallet links your wallet address to your account email in our internal
+                        database. This is not shown publicly by default, but it means your account is not fully
+                        anonymous in the app. For stronger anonymity, use a separate Google account or a new
+                        MetaMask wallet.
+                      </p>
                     </div>
                   )}
                 </div>
