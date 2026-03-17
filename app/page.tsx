@@ -60,6 +60,15 @@ function LandingHero() {
               </svg>
             </Link>
             <Link
+              href="/docs#walkthrough"
+              className="inline-flex h-14 items-center gap-2 rounded-full border border-white/15 px-8 text-sm font-medium text-white/80 hover:border-white/30 hover:text-white transition-colors"
+            >
+              Watch walkthrough
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18a1 1 0 0 0 0-1.68L9.54 5.98A1 1 0 0 0 8 6.82Z" />
+              </svg>
+            </Link>
+            <Link
               href="/about"
               className="inline-flex h-14 items-center px-8 text-sm font-medium text-white/70 hover:text-white"
             >

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 const SECTION_IDS = [
+  "walkthrough",
   "quickstart",
   "prerequisites",
   "installation",
@@ -18,6 +19,10 @@ const SECTION_IDS = [
 ];
 
 const NAV = [
+  {
+    group: "Overview",
+    items: [{ label: "Walkthrough", id: "walkthrough" }],
+  },
   {
     group: "Getting started",
     items: [{ label: "Quickstart", id: "quickstart" }],
@@ -51,14 +56,11 @@ const NAV = [
 export default function DocsSidebar() {
   const pathname = usePathname();
   const isApiPage = pathname === "/docs/api";
-  const [activeId, setActiveId] = useState<string>("quickstart");
-
-  useEffect(() => {
+  const [activeId, setActiveId] = useState<string>(() => {
+    if (typeof window === "undefined") return "walkthrough";
     const hash = window.location.hash.slice(1);
-    if (hash && SECTION_IDS.includes(hash)) {
-      setActiveId(hash);
-    }
-  }, []);
+    return hash && SECTION_IDS.includes(hash) ? hash : "walkthrough";
+  });
 
   useEffect(() => {
     if (isApiPage) return;
@@ -67,7 +69,7 @@ export default function DocsSidebar() {
 
     const sectionElements = SECTION_IDS.map((id) => document.getElementById(id)).filter(Boolean) as HTMLElement[];
 
-    let topVisible = "quickstart";
+    let topVisible = "walkthrough";
 
     const observer = new IntersectionObserver(
       (entries) => {

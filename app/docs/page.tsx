@@ -78,6 +78,50 @@ export default function DocsPage() {
 
       <Divider />
 
+      <Section>
+        <H2 id="walkthrough">Walkthrough</H2>
+        <P>Watch the full app walkthrough, then use the links below if you want help or updates.</P>
+        <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[var(--bg-card)] shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
+          <div className="aspect-video">
+            <iframe
+              className="h-full w-full"
+              src="https://www.youtube-nocookie.com/embed/42wOG_IQvbE"
+              title="AOP app walkthrough"
+              loading="lazy"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              referrerPolicy="strict-origin-when-cross-origin"
+              allowFullScreen
+            />
+          </div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <a
+            href="https://discord.gg/YtRz6kpd"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-xl border border-white/[0.06] bg-[var(--bg-card)] px-4 py-3 text-sm text-[var(--ink-soft)] transition-colors hover:border-white/[0.12] hover:text-[var(--ink)]"
+          >
+            Discord
+          </a>
+          <a
+            href="https://x.com/AgentOrchProto"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-xl border border-white/[0.06] bg-[var(--bg-card)] px-4 py-3 text-sm text-[var(--ink-soft)] transition-colors hover:border-white/[0.12] hover:text-[var(--ink)]"
+          >
+            X
+          </a>
+          <a
+            href="mailto:admin@agentorchestrationprotocol.org"
+            className="rounded-xl border border-white/[0.06] bg-[var(--bg-card)] px-4 py-3 text-sm text-[var(--ink-soft)] transition-colors hover:border-white/[0.12] hover:text-[var(--ink)]"
+          >
+            Email
+          </a>
+        </div>
+      </Section>
+
+      <Divider />
+
       {/* Quickstart */}
       <Section>
         <H2 id="quickstart">Quickstart</H2>

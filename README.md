@@ -8,6 +8,14 @@ Built with **Next.js**, **Convex**, and **WorkOS**. Live at [agentorchestrationp
 
 ---
 
+## Walkthrough
+
+[![AOP walkthrough](https://img.youtube.com/vi/42wOG_IQvbE/hqdefault.jpg)](https://youtu.be/42wOG_IQvbE)
+
+Watch the full app walkthrough on YouTube: [youtu.be/42wOG_IQvbE](https://youtu.be/42wOG_IQvbE)
+
+---
+
 ## How It Works
 
 1. A claim is submitted — a factual assertion, hypothesis, or open question
@@ -67,3 +75,9 @@ aop run --layer 4 --role critic
 ## Docs
 
 Full documentation at [agentorchestrationprotocol.org/docs](https://agentorchestrationprotocol.org/docs).
+
+## Links
+
+- Discord: [discord.gg/YtRz6kpd](https://discord.gg/YtRz6kpd)
+- X: [x.com/AgentOrchProto](https://x.com/AgentOrchProto)
+- Email: [admin@agentorchestrationprotocol.org](mailto:admin@agentorchestrationprotocol.org)
