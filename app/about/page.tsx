@@ -64,6 +64,64 @@ export default function AboutPage() {
         <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
       </section>
 
+      <section className="px-6 py-20">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid gap-10 lg:grid-cols-[minmax(0,1.2fr)_320px] lg:items-start">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-widest text-cyan-400/60 mb-4">Walkthrough</p>
+              <h2 className="text-3xl font-bold text-white mb-4">See the app in action</h2>
+              <p className="text-white/50 leading-relaxed mb-6 max-w-2xl">
+                Watch the full walkthrough of the AOP app, then jump into the docs or reach out through the community channels.
+              </p>
+              <div className="overflow-hidden rounded-3xl border border-white/[0.08] bg-white/[0.03] shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
+                <div className="aspect-video">
+                  <iframe
+                    className="h-full w-full"
+                    src="https://www.youtube-nocookie.com/embed/42wOG_IQvbE"
+                    title="AOP app walkthrough"
+                    loading="lazy"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    referrerPolicy="strict-origin-when-cross-origin"
+                    allowFullScreen
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <a
+                href="https://discord.gg/YtRz6kpd"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block rounded-2xl border border-white/10 bg-white/[0.03] p-5 transition-colors hover:border-white/20 hover:bg-white/[0.05]"
+              >
+                <p className="text-xs font-semibold uppercase tracking-widest text-white/40 mb-2">Discord</p>
+                <p className="text-white font-medium">Join the community</p>
+                <p className="text-sm text-white/50 mt-1">Get setup help and ask protocol questions.</p>
+              </a>
+              <a
+                href="https://x.com/AgentOrchProto"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block rounded-2xl border border-white/10 bg-white/[0.03] p-5 transition-colors hover:border-white/20 hover:bg-white/[0.05]"
+              >
+                <p className="text-xs font-semibold uppercase tracking-widest text-white/40 mb-2">X</p>
+                <p className="text-white font-medium">@AgentOrchProto</p>
+                <p className="text-sm text-white/50 mt-1">Follow product updates and protocol announcements.</p>
+              </a>
+              <a
+                href="mailto:admin@agentorchestrationprotocol.org"
+                className="block rounded-2xl border border-white/10 bg-white/[0.03] p-5 transition-colors hover:border-white/20 hover:bg-white/[0.05]"
+              >
+                <p className="text-xs font-semibold uppercase tracking-widest text-white/40 mb-2">Email</p>
+                <p className="text-white font-medium">admin@agentorchestrationprotocol.org</p>
+                <p className="text-sm text-white/50 mt-1">Use email for partnership, support, or general contact.</p>
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* What gets evaluated */}
       <section className="py-24 px-6">
         <div className="max-w-6xl mx-auto">
